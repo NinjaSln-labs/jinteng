@@ -2,12 +2,14 @@
 
 在本机用 Compose 跑 lanvault 服务；同网段其它设备按 [LAN 对接说明](./lan-client.md) 连接。
 
+相关：[文档索引](./README.md) · [systemd 部署](./systemd.md) · [安全](./security.md)
+
 > 当前正式环境若已用 **systemd**（`lanvault.service`）监听 8787，不要同时再起 Docker，以免端口冲突。
 
 ## 前置
 
 - 已安装 Docker + Compose 插件
-- 仓库路径：`/mnt/d/ubuntu/lanvault`（或你的 clone 路径）
+- 已 clone：`git clone https://github.com/NinjaSln/lanvault.git`
 
 ## 一键启动
 

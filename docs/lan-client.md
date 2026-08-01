@@ -1,5 +1,7 @@
 # LAN 内对接说明（如何拿到密钥）
 
+相关文档：[systemd 部署](./systemd.md) · [Docker](./docker-local.md) · [CLI](./cli.md) · [安全](./security.md)
+
 **浏览器打开服务根路径即可看对接页（无需 Token）：**
 
 `http://<主机IP>:8787/` 或 `http://<主机IP>:8787/docs`
@@ -34,14 +36,18 @@ docker compose -f deploy/docker-compose.yml exec lanvault cat /data/token
 - URL 示例：`http://192.168.1.23:8787`（把 IP 换成你的）
 - 本机容器互访也可用：`http://127.0.0.1:8787`
 
-### 二进制 `serve` 时
+### systemd / 二进制 `serve` 时
 
 ```bash
-# Token 默认在
+# Token 默认在（普通用户安装）
 cat ~/.lanvault/token
+# root + 仓库默认 unit：
+# cat /root/.lanvault/token
 # 或自定义目录
 cat "$LANVAULT_DIR/token"
 ```
+
+完整开机自启步骤见 [systemd.md](./systemd.md)。
 
 健康检查（无需 Token）：
 

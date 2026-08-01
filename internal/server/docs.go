@@ -193,7 +193,8 @@ curl -sS -X PUT -H "Authorization: Bearer $TOK" \
 
   <footer>
     lanvault · 打开本页即对接说明书 ·
-    <a href="/healthz">/healthz</a>
+    <a href="/healthz">/healthz</a> ·
+    完整文档见仓库 <code>docs/</code>（lan-client / systemd / cli / security）
   </footer>
 </main>
 </body>
