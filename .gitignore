@@ -1,0 +1,14 @@
+/bin/
+/dist/
+*.exe
+.env
+.env.*
+!.env.example
+.lanvault-test/
+.staging/
+.deepcode/
+.DS_Store
+# never commit vault material
+**/vault.bin
+**/token
+**/master.pass

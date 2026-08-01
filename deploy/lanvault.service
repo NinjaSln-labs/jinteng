@@ -1,0 +1,24 @@
+[Unit]
+Description=lanvault secrets server (LAN)
+Documentation=file:///mnt/d/ubuntu/lanvault/docs/lan-client.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Personal/WSL install: data under /root/.lanvault
+Environment=LANVAULT_DIR=/root/.lanvault
+Environment=LANVAULT_PASSWORD_FILE=/root/.lanvault/master.pass
+ExecStart=/usr/local/bin/lanvault serve --listen 0.0.0.0:8787
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+# Log to journal: journalctl -u lanvault -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
