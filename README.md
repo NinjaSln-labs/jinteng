@@ -98,4 +98,4 @@ bash scripts/smoke.sh          # 需先 build 出 bin/lanvault
 
 ## License
 
-未指定许可证前，默认保留所有权利；Clone 自用请自行负责密钥与部署安全。
+[MIT](LICENSE) © 2026 NinjaSln
