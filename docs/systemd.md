@@ -1,7 +1,9 @@
-# systemd 开机自启（二进制部署）
+# systemd 常驻（二进制部署）
 
-适合本机 / WSL / 树莓派 / 小主机：装一个二进制 + unit，开机自动 `serve`。
+适合 **Linux 本机 / WSL / 树莓派等小主机**：安装单个二进制 + systemd unit，在该系统启动后自动 `serve`。
 
+> 仓库里的 `deploy/lanvault.service` 是**个人单机示例**（默认 `User` 未设则为 root 环境变量、`0.0.0.0:8787` 监听）。  
+> 只本机访问可改成 `127.0.0.1:8787`；给局域网用再保持 `0.0.0.0` 并看好防火墙。  
 > 若已用 Docker 占用 `8787`，先停掉 Compose，再启本服务。
 
 ## 一次性安装
@@ -21,12 +23,14 @@ openssl rand -hex 24 > "$LANVAULT_DIR/master.pass"
 chmod 600 "$LANVAULT_DIR/master.pass"
 LANVAULT_PASSWORD_FILE="$LANVAULT_DIR/master.pass" lanvault init --dir "$LANVAULT_DIR"
 
-# 3) 安装 unit（按实际用户/路径改 Environment）
+# 3) 安装 unit（务必按你的用户/路径改 Environment，勿照搬 root 路径到别人机器）
 sudo install -m 644 deploy/lanvault.service /etc/systemd/system/lanvault.service
-# 默认模板使用 root + /root/.lanvault；普通用户请改成：
+# 模板默认：LANVAULT_DIR=/root/.lanvault ，监听 0.0.0.0:8787
+# 普通用户示例：
+#   User=YOU
 #   Environment=LANVAULT_DIR=/home/YOU/.lanvault
 #   Environment=LANVAULT_PASSWORD_FILE=/home/YOU/.lanvault/master.pass
-#   User=YOU
+#   ExecStart=... serve --listen 127.0.0.1:8787   # 若仅本机
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now lanvault
@@ -69,8 +73,8 @@ sudo systemctl restart lanvault
 
 ## WSL 注意
 
-- `systemctl enable` 在 **发行版启动** 时拉起服务。
-- Windows 开机后若未自动启动该 WSL 发行版，服务不会起来；需要时先打开 Ubuntu/WSL，或自行配置「登录时启动 WSL」。
+- 这里的「开机自启」= **该 WSL 发行版被启动之后** systemd 拉起服务。  
+  **不等于** Windows 一开机服务一定在跑（除非你另外配置了「登录时启动 WSL」）。
 - 二进制请装到 `/usr/local/bin`，不要把 `ExecStart` 指到可能较晚挂载的 `/mnt/d/...`。
 
 ## 备份

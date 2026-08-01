@@ -4,7 +4,7 @@
 
 相关：[文档索引](./README.md) · [systemd 部署](./systemd.md) · [安全](./security.md)
 
-> 当前正式环境若已用 **systemd**（`lanvault.service`）监听 8787，不要同时再起 Docker，以免端口冲突。
+> 若本机已在用 **systemd**（`lanvault.service`）监听 8787，不要再起 Docker，以免端口冲突。
 
 ## 前置
 
@@ -14,7 +14,7 @@
 ## 一键启动
 
 ```bash
-cd /mnt/d/ubuntu/lanvault
+cd /path/to/lanvault    # 换成你的 clone 路径
 bash deploy/up.sh
 ```
 
