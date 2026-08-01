@@ -1,7 +1,7 @@
 [Unit]
 Description=lanvault secrets server (LAN)
-Documentation=https://github.com/NinjaSln/lanvault/blob/master/docs/lan-client.md
-Documentation=https://github.com/NinjaSln/lanvault/blob/master/docs/systemd.md
+Documentation=https://github.com/NinjaSln-labs/lanvault/blob/master/docs/lan-client.md
+Documentation=https://github.com/NinjaSln-labs/lanvault/blob/master/docs/systemd.md
 After=network-online.target
 Wants=network-online.target
 

@@ -8,7 +8,7 @@
 
 ```bash
 # 1) 构建并安装二进制（勿依赖 /mnt 路径做开机启动）
-git clone https://github.com/NinjaSln/lanvault.git
+git clone https://github.com/NinjaSln-labs/lanvault.git
 cd lanvault
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/lanvault ./cmd/lanvault
 sudo install -m 755 bin/lanvault /usr/local/bin/lanvault

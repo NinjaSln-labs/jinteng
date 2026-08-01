@@ -2,7 +2,7 @@
 
 自用局域网密钥库：磁盘上只有密文，项目 / git / CI / agent **不落明文**。开发时用 `lanvault run` 在进程环境里临时注入。
 
-- 仓库：https://github.com/NinjaSln/lanvault
+- 仓库：https://github.com/NinjaSln-labs/lanvault
 - 技术：**Go 单二进制、无 CGO**（本机 / NAS / 树莓派 / Docker / systemd）
 - 服务起来后浏览器打开 **`http://<主机>:8787/`** 即可看对接说明（无需 Token）
 
@@ -20,7 +20,7 @@
 ## 快速开始（本机 CLI）
 
 ```bash
-git clone https://github.com/NinjaSln/lanvault.git
+git clone https://github.com/NinjaSln-labs/lanvault.git
 cd lanvault
 CGO_ENABLED=0 go build -o bin/lanvault ./cmd/lanvault
 

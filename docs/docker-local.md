@@ -9,7 +9,7 @@
 ## 前置
 
 - 已安装 Docker + Compose 插件
-- 已 clone：`git clone https://github.com/NinjaSln/lanvault.git`
+- 已 clone：`git clone https://github.com/NinjaSln-labs/lanvault.git`
 
 ## 一键启动
 
