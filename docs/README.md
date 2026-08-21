@@ -3,7 +3,7 @@
 | 文档 | 内容 |
 |------|------|
 | [../README.md](../README.md) | 项目总览与快速开始 |
-| [lan-client.md](./lan-client.md) | LAN 对接：URL / Token / `run` / curl |
+| [client.md](./client.md) | 客户端对接：URL / Token / `run` |
 | [systemd.md](./systemd.md) | 二进制 + systemd 开机自启 |
 | [docker-local.md](./docker-local.md) | 本机 Docker Compose |
 | [cli.md](./cli.md) | CLI 命令参考 |

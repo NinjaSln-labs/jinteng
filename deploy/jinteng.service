@@ -1,0 +1,27 @@
+[Unit]
+Description=金縢 (jinteng) secrets server (LAN)
+Documentation=https://github.com/NinjaSln-labs/jinteng/blob/master/docs/client.md
+Documentation=https://github.com/NinjaSln-labs/jinteng/blob/master/docs/systemd.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Example for a personal single-host install (often root on a small box / WSL).
+# Change JINTENG_DIR / PASSWORD_FILE (and add User=) for your account.
+# 0.0.0.0 exposes the API on all interfaces — use 127.0.0.1 if only local clients.
+Environment=JINTENG_DIR=/root/.jinteng
+Environment=JINTENG_PASSWORD_FILE=/root/.jinteng/master.pass
+ExecStart=/usr/local/bin/jinteng serve --listen 0.0.0.0:8787
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+# Log to journal: journalctl -u jinteng -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

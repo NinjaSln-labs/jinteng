@@ -1,20 +1,20 @@
 # 本机 Docker 部署
 
-在本机用 Compose 跑 lanvault 服务；同网段其它设备按 [LAN 对接说明](./lan-client.md) 连接。
+在本机用 Compose 跑 jinteng 服务；同网段其它设备按 [LAN 对接说明](./client.md) 连接。
 
 相关：[文档索引](./README.md) · [systemd 部署](./systemd.md) · [安全](./security.md)
 
-> 若本机已在用 **systemd**（`lanvault.service`）监听 8787，不要再起 Docker，以免端口冲突。
+> 若本机已在用 **systemd**（`jinteng.service`）监听 8787，不要再起 Docker，以免端口冲突。
 
 ## 前置
 
 - 已安装 Docker + Compose 插件
-- 已 clone：`git clone https://github.com/NinjaSln-labs/lanvault.git`
+- 已 clone：`git clone https://github.com/NinjaSln-labs/jinteng.git`
 
 ## 一键启动
 
 ```bash
-cd /path/to/lanvault    # 换成你的 clone 路径
+cd /path/to/jinteng    # 换成你的 clone 路径
 bash deploy/up.sh
 ```
 
@@ -36,10 +36,10 @@ chmod 600 secrets/master.pass
 
 docker compose build
 docker compose up -d
-docker compose exec lanvault cat /data/token
+docker compose exec jinteng cat /data/token
 ```
 
-首次启动入口会自动 `lanvault init`（数据在 volume `lanvault-data`）。
+首次启动入口会自动 `jinteng init`（数据在 volume `jinteng-data`）。
 
 ## 端口与访问
 
@@ -68,23 +68,23 @@ docker compose -f deploy/docker-compose.yml up -d
 [http://127.0.0.1:8787/](http://127.0.0.1:8787/)
 
 ```bash
-export LANVAULT_URL="http://127.0.0.1:8787"
-export LANVAULT_TOKEN="$(docker compose -f deploy/docker-compose.yml exec -T lanvault cat /data/token | tr -d '\r')"
+export JINTENG_URL="http://127.0.0.1:8787"
+export JINTENG_TOKEN="$(docker compose -f deploy/docker-compose.yml exec -T jinteng cat /data/token | tr -d '\r')"
 
-# 需要本机有 lanvault 二进制
-./bin/lanvault list
-./bin/lanvault set openai/key
-./bin/lanvault run -e OPENAI_API_KEY=openai/key -- printenv OPENAI_API_KEY
+# 需要本机有 jinteng 二进制
+./bin/jinteng list
+./bin/jinteng set openai/key
+./bin/jinteng run -e OPENAI_API_KEY=openai/key -- printenv OPENAI_API_KEY
 ```
 
-LAN 其它机器：把 `LANVAULT_URL` 换成局域网 IP，Token 用同一条（安全渠道拷贝）。详见 [lan-client.md](./lan-client.md)。
+LAN 其它机器：把 `JINTENG_URL` 换成局域网 IP，Token 用同一条（安全渠道拷贝）。详见 [client.md](./client.md)。
 
 ## 常用运维
 
 ```bash
 cd deploy
-docker compose logs -f lanvault
-docker compose restart lanvault
+docker compose logs -f jinteng
+docker compose restart jinteng
 docker compose down          # 停服务；volume 保留密钥数据
 docker compose down -v       # 危险：删掉 vault 数据
 ```
@@ -92,7 +92,7 @@ docker compose down -v       # 危险：删掉 vault 数据
 备份：备份 Docker volume，或：
 
 ```bash
-docker compose exec lanvault ls -la /data
+docker compose exec jinteng ls -la /data
 # vault.bin + token；另单独保管 secrets/master.pass
 ```
 

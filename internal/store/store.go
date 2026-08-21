@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sin/lanvault/internal/crypto"
+	"github.com/NinjaSln-labs/jinteng/internal/crypto"
 )
 
 const (
-	DefaultDirName  = ".lanvault"
+	DefaultDirName  = ".jinteng"
 	VaultFileName   = "vault.bin"
 	TokenFileName   = "token"
 	MetaVersion     = 1
@@ -23,7 +23,7 @@ const (
 var (
 	ErrNotFound      = errors.New("secret not found")
 	ErrAlreadyExists = errors.New("vault already exists")
-	ErrNotInit       = errors.New("vault not initialized; run: lanvault init")
+	ErrNotInit       = errors.New("vault not initialized; run: jinteng init")
 )
 
 type Entry struct {
@@ -46,7 +46,7 @@ type Vault struct {
 }
 
 func DefaultDir() (string, error) {
-	if d := os.Getenv("LANVAULT_DIR"); d != "" {
+	if d := os.Getenv("JINTENG_DIR"); d != "" {
 		return d, nil
 	}
 	home, err := os.UserHomeDir()

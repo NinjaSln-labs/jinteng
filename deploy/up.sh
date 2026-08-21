@@ -40,17 +40,17 @@ done
 if ! curl -sf http://127.0.0.1:8787/healthz >/dev/null 2>&1; then
   echo
   echo "error: service not healthy; logs:" >&2
-  "${COMPOSE[@]}" logs --tail=80 lanvault >&2 || true
+  "${COMPOSE[@]}" logs --tail=80 jinteng >&2 || true
   exit 1
 fi
 
-TOKEN="$("${COMPOSE[@]}" exec -T lanvault cat /data/token | tr -d '\r\n')"
+TOKEN="$("${COMPOSE[@]}" exec -T jinteng cat /data/token | tr -d '\r\n')"
 LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -z "${LAN_IP}" ]] && LAN_IP="<your-lan-ip>"
 
 cat <<EOF
 
-======= lanvault is up =======
+======= jinteng is up =======
 Docs page : http://127.0.0.1:8787/          ← 浏览器打开看对接说明
 Local API : http://127.0.0.1:8787
 LAN URL   : http://${LAN_IP}:8787
@@ -61,11 +61,11 @@ API Token :
   ${TOKEN}
 
 Client env (this machine):
-  export LANVAULT_URL=http://127.0.0.1:8787
-  export LANVAULT_TOKEN='${TOKEN}'
+  export JINTENG_URL=http://127.0.0.1:8787
+  export JINTENG_TOKEN='${TOKEN}'
 
 Repo docs:
   docs/docker-local.md
-  docs/lan-client.md
+  docs/client.md
 ============================
 EOF

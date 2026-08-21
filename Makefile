@@ -2,7 +2,7 @@
 
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/lanvault ./cmd/lanvault
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/jinteng ./cmd/jinteng
 
 tidy:
 	go mod tidy
@@ -14,7 +14,7 @@ dist:
 	bash scripts/build.sh
 
 clean:
-	rm -rf bin dist .lanvault-test
+	rm -rf bin dist .jinteng-test
 
 smoke: build
 	bash scripts/smoke.sh

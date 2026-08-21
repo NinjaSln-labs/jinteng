@@ -10,10 +10,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/sin/lanvault/internal/client"
-	"github.com/sin/lanvault/internal/crypto"
-	"github.com/sin/lanvault/internal/server"
-	"github.com/sin/lanvault/internal/store"
+	"github.com/NinjaSln-labs/jinteng/internal/client"
+	"github.com/NinjaSln-labs/jinteng/internal/crypto"
+	"github.com/NinjaSln-labs/jinteng/internal/server"
+	"github.com/NinjaSln-labs/jinteng/internal/store"
 	"golang.org/x/term"
 )
 
@@ -33,7 +33,7 @@ func main() {
 	case "help", "-h", "--help":
 		usage()
 	case "version", "-v", "--version":
-		fmt.Println("lanvault", version)
+		fmt.Println("金縢 jinteng", version)
 	case "init":
 		err = cmdInit(args)
 	case "set":
@@ -62,24 +62,24 @@ func main() {
 }
 
 func usage() {
-	fmt.Print(`lanvault — encrypted secrets for local LAN / solo dev
+	fmt.Print(`金縢 (jinteng) — encrypted secrets vault
 
 Usage:
-  lanvault init [--dir PATH]
-  lanvault set <name> [--note TEXT] [value|-]
-  lanvault get <name>
-  lanvault list
-  lanvault delete <name>
-  lanvault run -e ENV=secretName ... -- <command...>
-  lanvault serve [--listen ADDR]
-  lanvault token show|rotate
-  lanvault version
+  jinteng init [--dir PATH]
+  jinteng set <name> [--note TEXT] [value|-]
+  jinteng get <name>
+  jinteng list
+  jinteng delete <name>
+  jinteng run -e ENV=secretName ... -- <command...>
+  jinteng serve [--listen ADDR]
+  jinteng token show|rotate
+  jinteng version
 
 Env:
-  LANVAULT_DIR       vault directory (default: ~/.lanvault)
-  LANVAULT_PASSWORD  master password (prefer prompt / file in prod)
-  LANVAULT_URL       if set, CLI talks to remote serve (e.g. http://192.168.1.10:8787)
-  LANVAULT_TOKEN     API token for remote mode (default: $LANVAULT_DIR/token)
+  JINTENG_DIR       vault directory (default: ~/.jinteng)
+  JINTENG_PASSWORD  master password (prefer prompt / file in prod)
+  JINTENG_URL       if set, CLI talks to remote serve
+  JINTENG_TOKEN     API token for remote mode (default: $JINTENG_DIR/token)
 
 Never commit vault.bin, token, or plaintext .env files.
 `)
@@ -101,7 +101,7 @@ func cmdInit(args []string) error {
 	fmt.Printf("initialized vault at %s\n", store.VaultPath(dir))
 	fmt.Printf("API token written to %s (chmod 600)\n", store.TokenPath(dir))
 	fmt.Printf("token: %s\n", token)
-	fmt.Println("tip: export LANVAULT_PASSWORD only in a private shell; prefer interactive unlock for serve.")
+	fmt.Println("tip: export JINTENG_PASSWORD only in a private shell; prefer interactive unlock for serve.")
 	return nil
 }
 
@@ -149,7 +149,7 @@ func cmdSet(args []string) error {
 
 func cmdGet(args []string) error {
 	if len(args) != 1 {
-		return errors.New("usage: lanvault get <name>")
+		return errors.New("usage: jinteng get <name>")
 	}
 	name := args[0]
 	if remote() {
@@ -218,7 +218,7 @@ func cmdList(args []string) error {
 
 func cmdDelete(args []string) error {
 	if len(args) != 1 {
-		return errors.New("usage: lanvault delete <name>")
+		return errors.New("usage: jinteng delete <name>")
 	}
 	name := args[0]
 	if remote() {
@@ -241,7 +241,7 @@ func cmdRun(args []string) error {
 		return err
 	}
 	if len(cmdArgs) == 0 {
-		return errors.New("usage: lanvault run -e ENV=secretName ... -- <command>")
+		return errors.New("usage: jinteng run -e ENV=secretName ... -- <command>")
 	}
 
 	names := make([]string, 0, len(envMaps))
@@ -327,7 +327,7 @@ func cmdServe(args []string) error {
 
 func cmdToken(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: lanvault token show|rotate")
+		return errors.New("usage: jinteng token show|rotate")
 	}
 	dir, err := store.DefaultDir()
 	if err != nil {
@@ -364,12 +364,12 @@ func cmdToken(args []string) error {
 }
 
 func remote() bool {
-	return os.Getenv("LANVAULT_URL") != ""
+	return os.Getenv("JINTENG_URL") != ""
 }
 
 func remoteClient() (*client.Client, error) {
-	url := os.Getenv("LANVAULT_URL")
-	tok := os.Getenv("LANVAULT_TOKEN")
+	url := os.Getenv("JINTENG_URL")
+	tok := os.Getenv("JINTENG_TOKEN")
 	if tok == "" {
 		dir, err := store.DefaultDir()
 		if err != nil {
@@ -377,7 +377,7 @@ func remoteClient() (*client.Client, error) {
 		}
 		tok, err = store.ReadLocalToken(dir)
 		if err != nil {
-			return nil, fmt.Errorf("LANVAULT_TOKEN not set and cannot read local token: %w", err)
+			return nil, fmt.Errorf("JINTENG_TOKEN not set and cannot read local token: %w", err)
 		}
 	}
 	return client.New(url, tok), nil
@@ -396,10 +396,10 @@ func openLocal() (*store.Vault, error) {
 }
 
 func masterPassword(confirm bool) (string, error) {
-	if pw := os.Getenv("LANVAULT_PASSWORD"); pw != "" {
+	if pw := os.Getenv("JINTENG_PASSWORD"); pw != "" {
 		return pw, nil
 	}
-	if path := os.Getenv("LANVAULT_PASSWORD_FILE"); path != "" {
+	if path := os.Getenv("JINTENG_PASSWORD_FILE"); path != "" {
 		b, err := os.ReadFile(path)
 		if err != nil {
 			return "", err
@@ -416,7 +416,7 @@ func masterPassword(confirm bool) (string, error) {
 			fmt.Fprintf(os.Stderr, "generated master password (save it): %s\n", pw)
 			return pw, nil
 		}
-		return "", errors.New("set LANVAULT_PASSWORD or LANVAULT_PASSWORD_FILE (stdin is not a TTY)")
+		return "", errors.New("set JINTENG_PASSWORD or JINTENG_PASSWORD_FILE (stdin is not a TTY)")
 	}
 	fmt.Fprint(os.Stderr, "master password: ")
 	b1, err := term.ReadPassword(int(syscall.Stdin))
@@ -463,7 +463,7 @@ func parseDir(args []string) (dir string, rest []string, err error) {
 
 func parseSetArgs(args []string) (name, note string, rest []string, err error) {
 	if len(args) < 1 {
-		return "", "", nil, errors.New("usage: lanvault set <name> [--note TEXT] [value|-]")
+		return "", "", nil, errors.New("usage: jinteng set <name> [--note TEXT] [value|-]")
 	}
 	name = args[0]
 	i := 1

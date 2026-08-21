@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sin/lanvault/internal/store"
+	"github.com/NinjaSln-labs/jinteng/internal/store"
 )
 
 type Client struct {

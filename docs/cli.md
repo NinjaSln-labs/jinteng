@@ -1,11 +1,11 @@
 # CLI 参考
 
 ```text
-lanvault <command> [flags]
+jinteng <command> [flags]
 ```
 
 全局相关环境变量见 [README](../README.md#环境变量)。  
-设了 `LANVAULT_URL` 后，读写走远程 API（需 Token）；未设置则直接解锁本地 `vault.bin`。
+设了 `JINTENG_URL` 后，读写走远程 API（需 Token）；未设置则直接解锁本地 `vault.bin`。
 
 ## 命令
 
@@ -14,20 +14,20 @@ lanvault <command> [flags]
 创建新保险箱与 API Token。
 
 ```bash
-lanvault init [--dir PATH]
+jinteng init [--dir PATH]
 ```
 
 - 交互输入 master password（两次确认）
-- 或 `LANVAULT_PASSWORD` / `LANVAULT_PASSWORD_FILE`
+- 或 `JINTENG_PASSWORD` / `JINTENG_PASSWORD_FILE`
 - 非 TTY 且未设密码时会生成随机 master password（打印到 stderr，务必保存）
-- 产出：`$LANVAULT_DIR/vault.bin`、`$LANVAULT_DIR/token`
+- 产出：`$JINTENG_DIR/vault.bin`、`$JINTENG_DIR/token`
 
 ### `set`
 
 写入或更新一条密钥。
 
 ```bash
-lanvault set <name> [--note TEXT] [value|-]
+jinteng set <name> [--note TEXT] [value|-]
 ```
 
 - 无 `value`：隐藏输入
@@ -39,7 +39,7 @@ lanvault set <name> [--note TEXT] [value|-]
 打印密钥值（调试用；勿打进日志/聊天）。
 
 ```bash
-lanvault get <name>
+jinteng get <name>
 ```
 
 ### `list` / `ls`
@@ -47,13 +47,13 @@ lanvault get <name>
 列出名称（与可选 note），**不含明文**。
 
 ```bash
-lanvault list
+jinteng list
 ```
 
 ### `delete` / `rm`
 
 ```bash
-lanvault delete <name>
+jinteng delete <name>
 ```
 
 ### `run`
@@ -61,13 +61,13 @@ lanvault delete <name>
 解析密钥并注入子进程环境变量后执行命令——**推荐日常用法**。
 
 ```bash
-lanvault run -e ENV_NAME=secretName [-e ...] -- <command...>
+jinteng run -e ENV_NAME=secretName [-e ...] -- <command...>
 ```
 
 示例：
 
 ```bash
-lanvault run \
+jinteng run \
   -e OPENAI_API_KEY=openai/key \
   -e DATABASE_URL=db/url \
   -- npm run dev
@@ -80,7 +80,7 @@ lanvault run \
 启动 HTTP API + 对接说明页。
 
 ```bash
-lanvault serve [--listen HOST:PORT] [--lan] [--dir PATH]
+jinteng serve [--listen HOST:PORT] [--lan] [--dir PATH]
 ```
 
 | 旗标 | 含义 |
@@ -89,7 +89,7 @@ lanvault serve [--listen HOST:PORT] [--lan] [--dir PATH]
 | `--lan` | 等价 `--listen 0.0.0.0:8787` |
 | `--dir` | vault 目录 |
 
-需能解锁 vault：`LANVAULT_PASSWORD` 或 `LANVAULT_PASSWORD_FILE`。
+需能解锁 vault：`JINTENG_PASSWORD` 或 `JINTENG_PASSWORD_FILE`。
 
 公开页面（无 Token）：`GET /`、`GET /docs`  
 探活：`GET /healthz`
@@ -97,15 +97,15 @@ lanvault serve [--listen HOST:PORT] [--lan] [--dir PATH]
 ### `token`
 
 ```bash
-lanvault token show      # 显示本地 token 文件
-lanvault token rotate    # 轮换（须本地模式；更新服务端后再发各客户端）
+jinteng token show      # 显示本地 token 文件
+jinteng token rotate    # 轮换（须本地模式；更新服务端后再发各客户端）
 ```
 
 ### `version` / `help`
 
 ```bash
-lanvault version
-lanvault help
+jinteng version
+jinteng help
 ```
 
 ## 退出码

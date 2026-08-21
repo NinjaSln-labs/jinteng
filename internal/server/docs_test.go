@@ -18,7 +18,7 @@ func TestDocsPage(t *testing.T) {
 	if !strings.Contains(body, "http://192.168.1.10:8787") {
 		t.Fatal("missing base url")
 	}
-	if strings.Contains(body, "lv_") {
+	if strings.Contains(body, "jt_") {
 		t.Fatal("docs page must not embed API tokens")
 	}
 	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {

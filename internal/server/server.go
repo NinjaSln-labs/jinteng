@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sin/lanvault/internal/store"
+	"github.com/NinjaSln-labs/jinteng/internal/store"
 )
 
 type Server struct {
@@ -61,7 +61,7 @@ func bearer(r *http.Request) string {
 	if strings.HasPrefix(strings.ToLower(h), "bearer ") {
 		return strings.TrimSpace(h[7:])
 	}
-	return r.Header.Get("X-Lanvault-Token")
+	return r.Header.Get("X-Jinteng-Token")
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

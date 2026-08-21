@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sin/lanvault/internal/crypto"
+	"github.com/NinjaSln-labs/jinteng/internal/crypto"
 )
 
 func TestInitSetGetRoundTrip(t *testing.T) {

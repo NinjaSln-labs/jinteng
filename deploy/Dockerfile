@@ -8,19 +8,19 @@ COPY . .
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w" -o /out/lanvault ./cmd/lanvault
+    go build -trimpath -ldflags="-s -w" -o /out/jinteng ./cmd/jinteng
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tini wget \
-    && adduser -D -H -u 10001 lanvault \
+    && adduser -D -H -u 10001 jinteng \
     && mkdir -p /data \
-    && chown lanvault:lanvault /data
-COPY --from=build /out/lanvault /usr/local/bin/lanvault
+    && chown jinteng:jinteng /data
+COPY --from=build /out/jinteng /usr/local/bin/jinteng
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod 755 /entrypoint.sh
-USER lanvault
+USER jinteng
 VOLUME ["/data"]
-ENV LANVAULT_DIR=/data
-ENV LANVAULT_LISTEN=0.0.0.0:8787
+ENV JINTENG_DIR=/data
+ENV JINTENG_LISTEN=0.0.0.0:8787
 EXPOSE 8787
 ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]

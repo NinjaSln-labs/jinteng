@@ -2,7 +2,7 @@
 
 适合 **Linux 本机 / WSL / 树莓派等小主机**：安装单个二进制 + systemd unit，在该系统启动后自动 `serve`。
 
-> 仓库里的 `deploy/lanvault.service` 是**个人单机示例**（默认 `User` 未设则为 root 环境变量、`0.0.0.0:8787` 监听）。  
+> 仓库里的 `deploy/jinteng.service` 是**个人单机示例**（默认 `User` 未设则为 root 环境变量、`0.0.0.0:8787` 监听）。  
 > 只本机访问可改成 `127.0.0.1:8787`；给局域网用再保持 `0.0.0.0` 并看好防火墙。  
 > 若已用 Docker 占用 `8787`，先停掉 Compose，再启本服务。
 
@@ -10,38 +10,38 @@
 
 ```bash
 # 1) 构建并安装二进制（勿依赖 /mnt 路径做开机启动）
-git clone https://github.com/NinjaSln-labs/lanvault.git
-cd lanvault
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/lanvault ./cmd/lanvault
-sudo install -m 755 bin/lanvault /usr/local/bin/lanvault
+git clone https://github.com/NinjaSln-labs/jinteng.git
+cd jinteng
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/jinteng ./cmd/jinteng
+sudo install -m 755 bin/jinteng /usr/local/bin/jinteng
 
 # 2) 初始化数据目录（若尚未有 vault）
-export LANVAULT_DIR="$HOME/.lanvault"
-mkdir -p "$LANVAULT_DIR" && chmod 700 "$LANVAULT_DIR"
+export JINTENG_DIR="$HOME/.jinteng"
+mkdir -p "$JINTENG_DIR" && chmod 700 "$JINTENG_DIR"
 # 非交互示例：
-openssl rand -hex 24 > "$LANVAULT_DIR/master.pass"
-chmod 600 "$LANVAULT_DIR/master.pass"
-LANVAULT_PASSWORD_FILE="$LANVAULT_DIR/master.pass" lanvault init --dir "$LANVAULT_DIR"
+openssl rand -hex 24 > "$JINTENG_DIR/master.pass"
+chmod 600 "$JINTENG_DIR/master.pass"
+JINTENG_PASSWORD_FILE="$JINTENG_DIR/master.pass" jinteng init --dir "$JINTENG_DIR"
 
 # 3) 安装 unit（务必按你的用户/路径改 Environment，勿照搬 root 路径到别人机器）
-sudo install -m 644 deploy/lanvault.service /etc/systemd/system/lanvault.service
-# 模板默认：LANVAULT_DIR=/root/.lanvault ，监听 0.0.0.0:8787
+sudo install -m 644 deploy/jinteng.service /etc/systemd/system/jinteng.service
+# 模板默认：JINTENG_DIR=/root/.jinteng ，监听 0.0.0.0:8787
 # 普通用户示例：
 #   User=YOU
-#   Environment=LANVAULT_DIR=/home/YOU/.lanvault
-#   Environment=LANVAULT_PASSWORD_FILE=/home/YOU/.lanvault/master.pass
+#   Environment=JINTENG_DIR=/home/YOU/.jinteng
+#   Environment=JINTENG_PASSWORD_FILE=/home/YOU/.jinteng/master.pass
 #   ExecStart=... serve --listen 127.0.0.1:8787   # 若仅本机
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now lanvault
+sudo systemctl enable --now jinteng
 ```
 
-仓库内模板：[`deploy/lanvault.service`](../deploy/lanvault.service)。
+仓库内模板：[`deploy/jinteng.service`](../deploy/jinteng.service)。
 
 ## 验证
 
 ```bash
-systemctl status lanvault
+systemctl status jinteng
 curl -sS http://127.0.0.1:8787/healthz
 # 浏览器打开对接页（无需 Token）
 xdg-open http://127.0.0.1:8787/   # 或手动打开
@@ -50,25 +50,25 @@ xdg-open http://127.0.0.1:8787/   # 或手动打开
 读 Token（勿提交、勿贴到公开处）：
 
 ```bash
-cat ~/.lanvault/token
+cat ~/.jinteng/token
 # 或 root 安装：
-# cat /root/.lanvault/token
+# cat /root/.jinteng/token
 ```
 
 ## 日常运维
 
 ```bash
-sudo systemctl restart lanvault
-sudo systemctl stop lanvault
-journalctl -u lanvault -f
+sudo systemctl restart jinteng
+sudo systemctl stop jinteng
+journalctl -u jinteng -f
 ```
 
 更新二进制后：
 
 ```bash
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/lanvault ./cmd/lanvault
-sudo install -m 755 bin/lanvault /usr/local/bin/lanvault
-sudo systemctl restart lanvault
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/jinteng ./cmd/jinteng
+sudo install -m 755 bin/jinteng /usr/local/bin/jinteng
+sudo systemctl restart jinteng
 ```
 
 ## WSL 注意
@@ -89,4 +89,4 @@ sudo systemctl restart lanvault
 
 ## 对接客户端
 
-见 [lan-client.md](./lan-client.md)。服务起来后也可直接打开 `http://<主机>:8787/`。
+见 [client.md](./client.md)。服务起来后也可直接打开 `http://<主机>:8787/`。

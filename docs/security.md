@@ -6,7 +6,7 @@
 |------|------|
 | 不明文落盘 | `vault.bin`：Argon2id 派生密钥 + AES-256-GCM |
 | 不进 git | 仓库只保留 secret **名称**；忽略 `vault.bin` / `token` / `master.pass` / `.env` |
-| 不进 CI/agent 源码 | 用 `lanvault run` 运行时注入环境变量 |
+| 不进 CI/agent 源码 | 用 `jinteng run` 运行时注入环境变量 |
 | LAN 统一 | `serve` + Bearer Token；客户端不持有 master password |
 
 ## 两把钥匙
@@ -14,9 +14,9 @@
 | 密钥 | 谁持有 | 用途 |
 |------|--------|------|
 | **Master password** | 仅服务端（或本机直连 CLI） | 解密 `vault.bin` |
-| **API Token** (`lv_…`) | 服务端 + 受信任客户端 | 调用 `/v1/*` |
+| **API Token** (`jt_…`) | 服务端 + 受信任客户端 | 调用 `/v1/*` |
 
-客户端 **不要** 分发 master password。Token 泄露后：在服务端 `lanvault token rotate`，更新各客户端。
+客户端 **不要** 分发 master password。Token 泄露后：在服务端 `jinteng token rotate`，更新各客户端。
 
 ## 信任边界
 
@@ -27,7 +27,7 @@
 ## 文件权限建议
 
 ```text
-$LANVAULT_DIR/          0700
+$JINTENG_DIR/          0700
   vault.bin             0600
   token                 0600
   master.pass           0600
@@ -37,7 +37,7 @@ Docker：`deploy/secrets/master.pass` 勿提交（已有 `deploy/secrets/.gitign
 
 ## 运维注意
 
-- `lanvault get` / API GET 会取出明文——只用于调试，避免进日志、截图、聊天。
+- `jinteng get` / API GET 会取出明文——只用于调试，避免进日志、截图、聊天。
 - 备份 `vault.bin` 时必须同时安全保管 `master.pass`，否则无法恢复。
 - 本项目不做：企业 SSO、设备信任、浏览器 autofill、审计合规套件；自用开发向。
 

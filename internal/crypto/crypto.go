@@ -61,7 +61,7 @@ func Open(password string, blob []byte) ([]byte, error) {
 		return nil, errors.New("vault file too short")
 	}
 	if string(blob[:len(Magic)]) != Magic {
-		return nil, errors.New("not a lanvault file")
+		return nil, errors.New("not a jinteng vault file")
 	}
 	off := len(Magic)
 	salt := blob[off : off+SaltSize]
@@ -102,7 +102,7 @@ func NewToken() (string, error) {
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("lv_%x", b), nil
+	return fmt.Sprintf("jt_%x", b), nil
 }
 
 // RandomPassword generates a strong passphrase for non-interactive bootstrap.

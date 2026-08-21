@@ -1,23 +1,23 @@
 # 本机 Docker 部署。用法：bash deploy/up.sh
-# 文档：docs/docker-local.md · LAN 对接：docs/lan-client.md
+# 文档：docs/docker-local.md · LAN 对接：docs/client.md
 services:
-  lanvault:
+  jinteng:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: lanvault:local
+    image: jinteng:local
     restart: unless-stopped
     ports:
       # 默认只绑本机。要给 LAN 其它设备用，改成 "8787:8787"
       - "127.0.0.1:8787:8787"
     volumes:
-      - lanvault-data:/data
+      - jinteng-data:/data
     environment:
-      LANVAULT_DIR: /data
-      LANVAULT_LISTEN: "0.0.0.0:8787"
-      LANVAULT_PASSWORD_FILE: /run/secrets/lanvault_master
+      JINTENG_DIR: /data
+      JINTENG_LISTEN: "0.0.0.0:8787"
+      JINTENG_PASSWORD_FILE: /run/secrets/jinteng_master
     secrets:
-      - lanvault_master
+      - jinteng_master
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/healthz"]
       interval: 5s
@@ -26,8 +26,8 @@ services:
       start_period: 10s
 
 secrets:
-  lanvault_master:
+  jinteng_master:
     file: ./secrets/master.pass
 
 volumes:
-  lanvault-data:
+  jinteng-data:

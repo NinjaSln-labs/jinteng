@@ -33,7 +33,7 @@ func renderDocsHTML(base string) string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lanvault · LAN 对接说明</title>
+<title>金縢 · 对接说明</title>
 <style>
   :root {
     --bg: #0f1216;
@@ -122,8 +122,8 @@ func renderDocsHTML(base string) string {
 <body>
 <main>
   <p class="pill">无需登录 · 本页不含 Token / 密钥明文</p>
-  <h1>lanvault 对接说明</h1>
-  <p class="lead">局域网加密密钥库。客户端用 URL + API Token 对接；项目 / git / CI / agent 里只写密钥名，用 <code>lanvault run</code> 在运行时注入。</p>
+  <h1>金縢 对接说明</h1>
+  <p class="lead">加密密钥库（金縢 / jinteng）。客户端用 URL + API Token 对接；项目 / git / CI / agent 里只写密钥名，用 <code>jinteng run</code> 在运行时注入。</p>
 
   <div class="card">
     <div class="row"><span class="k">当前服务地址</span><span class="v" id="base">%s</span></div>
@@ -134,20 +134,18 @@ func renderDocsHTML(base string) string {
   <div class="warn">
     <strong>Token 不会显示在本页。</strong>
     在服务端读取：Docker 用
-    <code>docker compose -f deploy/docker-compose.yml exec lanvault cat /data/token</code>；
-    二进制部署用 <code>cat ~/.lanvault/token</code>（或 <code>$LANVAULT_DIR/token</code>）。
+    <code>docker compose -f deploy/docker-compose.yml exec jinteng cat /data/token</code>；
+    二进制部署用 <code>cat ~/.jinteng/token</code>（或 <code>$JINTENG_DIR/token</code>）。
   </div>
 
   <h2>1. 客户端环境变量</h2>
-  <pre id="envblock">export LANVAULT_URL='%s'
-export LANVAULT_TOKEN='&lt;从服务端 token 文件粘贴&gt;'
+  <pre id="envblock">export JINTENG_URL='%s'
+export JINTENG_TOKEN='&lt;从服务端 token 文件粘贴&gt;'
 
-# 校验
-curl -sS "$LANVAULT_URL/healthz"
-lanvault list</pre>
+jinteng list</pre>
 
   <h2>2. 推荐：运行时注入（不明文进仓库）</h2>
-  <pre>lanvault run \
+  <pre>jinteng run \
   -e OPENAI_API_KEY=openai/key \
   -e DATABASE_URL=db/url \
   -- your-dev-server</pre>
@@ -165,38 +163,21 @@ lanvault list</pre>
       <tr><td>POST</td><td><code>/v1/resolve</code></td><td>批量解析 <code>{"refs":["a","b"]}</code></td></tr>
     </tbody>
   </table>
-  <p>鉴权头：<code>Authorization: Bearer &lt;token&gt;</code> 或 <code>X-Lanvault-Token: &lt;token&gt;</code></p>
+  <p>鉴权头：<code>Authorization: Bearer &lt;token&gt;</code> 或 <code>X-Jinteng-Token: &lt;token&gt;</code></p>
 
-  <h2>4. curl 示例</h2>
-  <pre>BASE='%s'
-TOK="$LANVAULT_TOKEN"
-
-curl -sS -H "Authorization: Bearer $TOK" "$BASE/v1/secrets"
-
-curl -sS -H "Authorization: Bearer $TOK" \
-  -H "Content-Type: application/json" \
-  -d '{"refs":["openai/key"]}' \
-  "$BASE/v1/resolve"
-
-curl -sS -X PUT -H "Authorization: Bearer $TOK" \
-  -H "Content-Type: application/json" \
-  -d '{"value":"...","note":"dev"}' \
-  "$BASE/v1/secrets/openai%%2Fkey"</pre>
-
-  <h2>5. 安全注意</h2>
+  <h2>4. 安全注意</h2>
   <ul>
-    <li>本服务默认 HTTP + Bearer，只适合可信局域网。</li>
-    <li>不要把端口暴露到公网；远程请用 VPN 或 HTTPS 反代。</li>
+    <li>本服务默认 HTTP + Bearer；远程请用 VPN 或 HTTPS 反代，勿裸暴露应用端口。</li>
     <li>Token 泄露后在服务端 rotate，并更新各客户端。</li>
     <li>切勿把 <code>token</code>、<code>vault.bin</code>、真实 <code>.env</code> 提交进 git。</li>
   </ul>
 
   <footer>
-    lanvault · 打开本页即对接说明书 ·
+    金縢 · 打开本页即对接说明书 ·
     <a href="/healthz">/healthz</a> ·
-    完整文档见仓库 <code>docs/</code>（lan-client / systemd / cli / security）
+    完整文档见仓库 <code>docs/</code>（client / systemd / cli / security）
   </footer>
 </main>
 </body>
-</html>`, b, b, b, b, b, b, b)
+</html>`, b, b, b, b, b, b)
 }

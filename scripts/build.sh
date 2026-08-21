@@ -6,14 +6,14 @@ mkdir -p "$OUT"
 
 build() {
   local os="$1" arch="$2"
-  local name="lanvault_${os}_${arch}"
+  local name="jinteng_${os}_${arch}"
   if [[ "$os" == "windows" ]]; then
     name="${name}.exe"
   fi
   echo "→ $name"
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
     go build -trimpath -ldflags="-s -w" \
-    -o "${OUT}/${name}" "${ROOT}/cmd/lanvault"
+    -o "${OUT}/${name}" "${ROOT}/cmd/jinteng"
 }
 
 cd "$ROOT"

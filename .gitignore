@@ -4,7 +4,7 @@
 .env
 .env.*
 !.env.example
-.lanvault-test/
+.jinteng-test/
 .staging/
 .deepcode/
 .DS_Store

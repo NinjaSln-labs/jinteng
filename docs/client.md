@@ -6,7 +6,7 @@
 
 `http://<主机IP>:8787/` 或 `http://<主机IP>:8787/docs`
 
-页面会按你访问的 Host 填好 `LANVAULT_URL` 示例；**不会显示 Token**（仍从服务端 `token` 文件读取）。
+页面会按你访问的 Host 填好 `JINTENG_URL` 示例；**不会显示 Token**（仍从服务端 `token` 文件读取）。
 
 ---
 
@@ -14,8 +14,8 @@
 
 | 配置 | 含义 | 从哪来 |
 |------|------|--------|
-| `LANVAULT_URL` | 服务地址 | `http://<主机局域网IP>:8787` |
-| `LANVAULT_TOKEN` | API Token | 服务端数据目录里的 `token` 文件 |
+| `JINTENG_URL` | 服务地址 | `http://<主机局域网IP>:8787` |
+| `JINTENG_TOKEN` | API Token | 服务端数据目录里的 `token` 文件 |
 
 **不要**把 master password 发给客户端；客户端只拿 Token。
 
@@ -30,7 +30,7 @@
 hostname -I | awk '{print $1}'
 
 # 读出 Token（首次 up 后）
-docker compose -f deploy/docker-compose.yml exec lanvault cat /data/token
+docker compose -f deploy/docker-compose.yml exec jinteng cat /data/token
 ```
 
 - URL 示例：`http://192.168.1.23:8787`（把 IP 换成你的）
@@ -40,11 +40,11 @@ docker compose -f deploy/docker-compose.yml exec lanvault cat /data/token
 
 ```bash
 # Token 默认在（普通用户安装）
-cat ~/.lanvault/token
+cat ~/.jinteng/token
 # root + 仓库默认 unit：
-# cat /root/.lanvault/token
+# cat /root/.jinteng/token
 # 或自定义目录
-cat "$LANVAULT_DIR/token"
+cat "$JINTENG_DIR/token"
 ```
 
 完整开机自启步骤见 [systemd.md](./systemd.md)。
@@ -63,23 +63,23 @@ curl -sS "http://192.168.1.23:8787/healthz"
 在开发机 shell（或 `~/.bashrc` 私有片段，勿提交仓库）：
 
 ```bash
-export LANVAULT_URL="http://192.168.1.23:8787"
-export LANVAULT_TOKEN="lv_xxxxxxxx"   # 来自服务端 token 文件
+export JINTENG_URL="http://192.168.1.23:8787"
+export JINTENG_TOKEN="jt_xxxxxxxx"   # 来自服务端 token 文件
 ```
 
 也可把 Token 落到本地文件（权限 `600`）：
 
 ```bash
-mkdir -p ~/.lanvault
-chmod 700 ~/.lanvault
+mkdir -p ~/.jinteng
+chmod 700 ~/.jinteng
 # 从服务端安全拷贝 token 内容
-printf '%s\n' 'lv_xxxxxxxx' > ~/.lanvault/token
-chmod 600 ~/.lanvault/token
-export LANVAULT_URL="http://192.168.1.23:8787"
-# 未设 LANVAULT_TOKEN 时，CLI 会读 ~/.lanvault/token
+printf '%s\n' 'jt_xxxxxxxx' > ~/.jinteng/token
+chmod 600 ~/.jinteng/token
+export JINTENG_URL="http://192.168.1.23:8787"
+# 未设 JINTENG_TOKEN 时，CLI 会读 ~/.jinteng/token
 ```
 
-客户端需要本机有 `lanvault` 二进制（从本仓库 `bin/` 或 `scripts/build.sh` 产物拷贝即可），**不需要** master password。
+客户端需要本机有 `jinteng` 二进制（从本仓库 `bin/` 或 `scripts/build.sh` 产物拷贝即可），**不需要** master password。
 
 ---
 
@@ -88,7 +88,7 @@ export LANVAULT_URL="http://192.168.1.23:8787"
 仓库里只写**密钥名**，不写值：
 
 ```bash
-lanvault run \
+jinteng run \
   -e OPENAI_API_KEY=openai/key \
   -e DATABASE_URL=db/url \
   -- npm run dev
@@ -99,7 +99,7 @@ lanvault run \
 Agent / CI 同样包一层：
 
 ```bash
-lanvault run -e API_KEY=openai/key -- python agent.py
+jinteng run -e API_KEY=openai/key -- python agent.py
 ```
 
 ---
@@ -109,16 +109,16 @@ lanvault run -e API_KEY=openai/key -- python agent.py
 ### CLI
 
 ```bash
-lanvault list                          # 名称列表（无明文）
-lanvault get openai/key                # 调试用；勿打进日志
-echo -n 'secret' | lanvault set openai/key -
+jinteng list                          # 名称列表（无明文）
+jinteng get openai/key                # 调试用；勿打进日志
+echo -n 'secret' | jinteng set openai/key -
 ```
 
 ### curl / HTTP
 
 ```bash
 BASE="http://192.168.1.23:8787"
-TOK="$LANVAULT_TOKEN"
+TOK="$JINTENG_TOKEN"
 
 # 列表（无 value）
 curl -sS -H "Authorization: Bearer $TOK" "$BASE/v1/secrets"
@@ -139,7 +139,7 @@ curl -sS -X PUT -H "Authorization: Bearer $TOK" \
   "$BASE/v1/secrets/openai%2Fkey"
 ```
 
-也可用头：`X-Lanvault-Token: <token>`。
+也可用头：`X-Jinteng-Token: <token>`。
 
 ### 任意语言
 
@@ -151,5 +151,5 @@ curl -sS -X PUT -H "Authorization: Bearer $TOK" \
 
 - 默认 HTTP + Bearer，只应在**可信局域网**使用。
 - 不要把 `8787` 映射到公网；需要远程时加 VPN 或 HTTPS 反代并限制来源 IP。
-- Token 等同大门钥匙：泄露后在服务端执行 `lanvault token rotate`（本地模式）并更新各客户端。
+- Token 等同大门钥匙：泄露后在服务端执行 `jinteng token rotate`（本地模式）并更新各客户端。
 - 项目仓库继续 gitignore：`.env`、`vault.bin`、`token`、`master.pass`。

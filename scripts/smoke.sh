@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="${ROOT}/bin/lanvault"
-DIR="${ROOT}/.lanvault-test"
+BIN="${ROOT}/bin/jinteng"
+DIR="${ROOT}/.jinteng-test"
 rm -rf "$DIR"
-export LANVAULT_DIR="$DIR"
-export LANVAULT_PASSWORD='smoke-test-master-password-not-for-prod'
+export JINTENG_DIR="$DIR"
+export JINTENG_PASSWORD='smoke-test-master-password-not-for-prod'
 
-"$BIN" init >/tmp/lanvault-smoke-init.txt
+"$BIN" init >/tmp/jinteng-smoke-init.txt
 "$BIN" set demo/key 'hello-secret'
 "$BIN" set demo/other 'other-value'
 got="$("$BIN" get demo/key)"
@@ -25,11 +25,11 @@ for i in $(seq 1 30); do
   sleep 0.1
 done
 docs="$(curl -sf http://127.0.0.1:18787/)"
-echo "$docs" | grep -q 'lanvault 对接说明' || { echo "docs page missing"; exit 1; }
-if echo "$docs" | grep -q 'lv_'; then echo "docs page leaked token prefix"; exit 1; fi
-export LANVAULT_URL=http://127.0.0.1:18787
-export LANVAULT_TOKEN="$(cat "$DIR/token")"
-remote_got="$(LANVAULT_PASSWORD= "$BIN" get demo/key)"
+echo "$docs" | grep -q '金縢 对接说明' || { echo "docs page missing"; exit 1; }
+if echo "$docs" | grep -q 'jt_'; then echo "docs page leaked token prefix"; exit 1; fi
+export JINTENG_URL=http://127.0.0.1:18787
+export JINTENG_TOKEN="$(cat "$DIR/token")"
+remote_got="$(JINTENG_PASSWORD= "$BIN" get demo/key)"
 [[ "$remote_got" == "hello-secret" ]] || { echo "remote get mismatch: $remote_got"; exit 1; }
 
 echo "SMOKE OK"
