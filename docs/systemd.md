@@ -15,7 +15,7 @@ cd jinteng
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/jinteng ./cmd/jinteng
 sudo install -m 755 bin/jinteng /usr/local/bin/jinteng
 
-# 2) 初始化数据目录（若尚未有 vault）
+# 2) 初始化数据目录（若尚未有金縢）
 export JINTENG_DIR="$HOME/.jinteng"
 mkdir -p "$JINTENG_DIR" && chmod 700 "$JINTENG_DIR"
 # 非交互示例：
@@ -83,8 +83,8 @@ sudo systemctl restart jinteng
 
 | 文件 | 作用 |
 |------|------|
-| `vault.bin` | 加密保险箱 |
-| `master.pass` | 解锁 vault（仅服务端） |
+| `jinteng.bin` | 加密金縢数据 |
+| `master.pass` | 解锁用主密码（仅服务端） |
 | `token` | LAN API 鉴权（可 rotate） |
 
 ## 对接客户端

@@ -8,7 +8,10 @@
 .staging/
 .deepcode/
 .DS_Store
-# never commit vault material
-**/vault.bin
+# never commit jinteng material
+**/jinteng.bin
 **/token
 **/master.pass
+# local-only handoff (never track)
+HANDOFF.md
+HANDOFF-ARCHIVE/

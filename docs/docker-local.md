@@ -86,14 +86,14 @@ cd deploy
 docker compose logs -f jinteng
 docker compose restart jinteng
 docker compose down          # 停服务；volume 保留密钥数据
-docker compose down -v       # 危险：删掉 vault 数据
+docker compose down -v       # 危险：删掉金縢数据
 ```
 
 备份：备份 Docker volume，或：
 
 ```bash
 docker compose exec jinteng ls -la /data
-# vault.bin + token；另单独保管 secrets/master.pass
+# jinteng.bin + token；另单独保管 secrets/master.pass
 ```
 
 ## 文件说明
@@ -102,6 +102,6 @@ docker compose exec jinteng ls -la /data
 |------|------|
 | `deploy/docker-compose.yml` | 本机 Compose |
 | `deploy/Dockerfile` | 多阶段构建 |
-| `deploy/entrypoint.sh` | 无 vault 则 init，再 serve |
+| `deploy/entrypoint.sh` | 无数据文件则 init，再 serve |
 | `deploy/secrets/master.pass` | 解锁保险箱（勿提交） |
 | `deploy/up.sh` | 一键 build/up + 打印对接信息 |

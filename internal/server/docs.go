@@ -169,7 +169,7 @@ jinteng list</pre>
   <ul>
     <li>本服务默认 HTTP + Bearer；远程请用 VPN 或 HTTPS 反代，勿裸暴露应用端口。</li>
     <li>Token 泄露后在服务端 rotate，并更新各客户端。</li>
-    <li>切勿把 <code>token</code>、<code>vault.bin</code>、真实 <code>.env</code> 提交进 git。</li>
+    <li>切勿把 <code>token</code>、<code>jinteng.bin</code>、真实 <code>.env</code> 提交进 git。</li>
   </ul>
 
   <footer>

@@ -81,7 +81,7 @@ Env:
   JINTENG_URL       if set, CLI talks to remote serve
   JINTENG_TOKEN     API token for remote mode (default: $JINTENG_DIR/token)
 
-Never commit vault.bin, token, or plaintext .env files.
+Never commit jinteng.bin, token, or plaintext .env files.
 `)
 }
 
@@ -98,7 +98,7 @@ func cmdInit(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("initialized vault at %s\n", store.VaultPath(dir))
+	fmt.Printf("initialized store at %s\n", store.VaultPath(dir))
 	fmt.Printf("API token written to %s (chmod 600)\n", store.TokenPath(dir))
 	fmt.Printf("token: %s\n", token)
 	fmt.Println("tip: export JINTENG_PASSWORD only in a private shell; prefer interactive unlock for serve.")

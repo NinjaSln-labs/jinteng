@@ -26,7 +26,7 @@ git clone https://github.com/NinjaSln-labs/jinteng.git
 cd jinteng
 CGO_ENABLED=0 go build -o bin/jinteng ./cmd/jinteng
 
-./bin/jinteng init                 # 创建 vault + API token
+./bin/jinteng init                 # 创建金縢数据目录 + API token
 ./bin/jinteng set openai/key       # 交互输入；或 stdin: echo -n '…' | ./bin/jinteng set openai/key -
 ./bin/jinteng list
 
@@ -37,7 +37,7 @@ CGO_ENABLED=0 go build -o bin/jinteng ./cmd/jinteng
   -- your-dev-server
 ```
 
-默认数据目录：`~/.jinteng/`（`vault.bin` + `token`）。可用 `JINTENG_DIR` 覆盖。
+默认数据目录：`~/.jinteng/`（`jinteng.bin` + `token`）。可用 `JINTENG_DIR` 覆盖。
 
 ## 部署怎么选
 
@@ -47,7 +47,7 @@ CGO_ENABLED=0 go build -o bin/jinteng ./cmd/jinteng
 | WSL 常驻 | 同上；指 **WSL 发行版启动时**拉起，不等于 Windows 开机即起 |
 | 本机 Docker | [docs/docker-local.md](docs/docker-local.md) · `bash deploy/up.sh` |
 | NAS / 其它 Linux 盒子 | 用 Docker，或按 systemd 文档自行装二进制（无厂商专用包） |
-| 只本机、不常驻 HTTP | CLI 直读写本地 vault，不必 `serve` |
+| 只本机、不常驻 HTTP | CLI 直读写本地金縢，不必 `serve` |
 | 远程客户端取密钥 | [docs/client.md](docs/client.md) |
 | 多架构二进制 | `bash scripts/build.sh` → `dist/` |
 
@@ -56,7 +56,7 @@ CGO_ENABLED=0 go build -o bin/jinteng ./cmd/jinteng
 ### 最小远程客户端
 
 ```bash
-export JINTENG_URL=https://vault.example.com
+export JINTENG_URL=https://jinteng.example.com
 # 服务端 token：二进制/systemd 多为 ~/.jinteng/token 或 /root/.jinteng/token
 # Docker：docker compose exec jinteng cat /data/token
 export JINTENG_TOKEN="$(tr -d '\n' < ~/.jinteng/token)"
@@ -106,8 +106,7 @@ make smoke                     # 本地 CLI + 临时 serve
 | `~/.lanvault` | `~/.jinteng`（可直接挪目录并改名） |
 | 头 `X-Lanvault-Token` | `X-Jinteng-Token` |
 | Token 前缀 `lv_` | 新发为 `jt_`（旧 token 仍可用到 rotate） |
-
-Vault 文件魔数未改，旧 `vault.bin` 可继续用。
+| `vault.bin` | `jinteng.bin` |
 
 ## 边界（刻意不做）
 

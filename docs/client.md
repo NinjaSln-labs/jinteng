@@ -152,4 +152,4 @@ curl -sS -X PUT -H "Authorization: Bearer $TOK" \
 - 默认 HTTP + Bearer，只应在**可信局域网**使用。
 - 不要把 `8787` 映射到公网；需要远程时加 VPN 或 HTTPS 反代并限制来源 IP。
 - Token 等同大门钥匙：泄露后在服务端执行 `jinteng token rotate`（本地模式）并更新各客户端。
-- 项目仓库继续 gitignore：`.env`、`vault.bin`、`token`、`master.pass`。
+- 项目仓库继续 gitignore：`.env`、`jinteng.bin`、`token`、`master.pass`。

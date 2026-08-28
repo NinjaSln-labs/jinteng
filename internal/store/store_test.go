@@ -2,6 +2,7 @@ package store
 
 import (
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/NinjaSln-labs/jinteng/internal/crypto"
@@ -37,12 +38,14 @@ func TestInitSetGetRoundTrip(t *testing.T) {
 	if _, err := Open(dir, "wrong-password"); err == nil {
 		t.Fatal("expected wrong password to fail")
 	}
-	fi, err := os.Stat(VaultPath(dir))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi.Mode().Perm()&0o077 != 0 {
-		t.Fatalf("vault perms too open: %v", fi.Mode())
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(VaultPath(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("store file perms too open: %v", fi.Mode())
+		}
 	}
 }
 

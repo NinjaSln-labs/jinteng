@@ -5,7 +5,7 @@ jinteng <command> [flags]
 ```
 
 全局相关环境变量见 [README](../README.md#环境变量)。  
-设了 `JINTENG_URL` 后，读写走远程 API（需 Token）；未设置则直接解锁本地 `vault.bin`。
+设了 `JINTENG_URL` 后，读写走远程 API（需 Token）；未设置则直接解锁本地 `jinteng.bin`。
 
 ## 命令
 
@@ -20,7 +20,7 @@ jinteng init [--dir PATH]
 - 交互输入 master password（两次确认）
 - 或 `JINTENG_PASSWORD` / `JINTENG_PASSWORD_FILE`
 - 非 TTY 且未设密码时会生成随机 master password（打印到 stderr，务必保存）
-- 产出：`$JINTENG_DIR/vault.bin`、`$JINTENG_DIR/token`
+- 产出：`$JINTENG_DIR/jinteng.bin`、`$JINTENG_DIR/token`
 
 ### `set`
 
@@ -87,9 +87,9 @@ jinteng serve [--listen HOST:PORT] [--lan] [--dir PATH]
 |------|------|
 | `--listen` | 默认 `127.0.0.1:8787` |
 | `--lan` | 等价 `--listen 0.0.0.0:8787` |
-| `--dir` | vault 目录 |
+| `--dir` | 金縢数据目录 |
 
-需能解锁 vault：`JINTENG_PASSWORD` 或 `JINTENG_PASSWORD_FILE`。
+需能解锁：`JINTENG_PASSWORD` 或 `JINTENG_PASSWORD_FILE`。
 
 公开页面（无 Token）：`GET /`、`GET /docs`  
 探活：`GET /healthz`

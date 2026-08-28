@@ -14,16 +14,16 @@ import (
 )
 
 const (
-	DefaultDirName  = ".jinteng"
-	VaultFileName   = "vault.bin"
-	TokenFileName   = "token"
-	MetaVersion     = 1
+	DefaultDirName = ".jinteng"
+	VaultFileName  = "jinteng.bin"
+	TokenFileName  = "token"
+	MetaVersion    = 1
 )
 
 var (
 	ErrNotFound      = errors.New("secret not found")
-	ErrAlreadyExists = errors.New("vault already exists")
-	ErrNotInit       = errors.New("vault not initialized; run: jinteng init")
+	ErrAlreadyExists = errors.New("jinteng store already exists")
+	ErrNotInit       = errors.New("jinteng not initialized; run: jinteng init")
 )
 
 type Entry struct {
@@ -113,7 +113,7 @@ func Open(dir, password string) (*Vault, error) {
 	}
 	var data payload
 	if err := json.Unmarshal(pt, &data); err != nil {
-		return nil, fmt.Errorf("vault decode: %w", err)
+		return nil, fmt.Errorf("jinteng decode: %w", err)
 	}
 	if data.Entries == nil {
 		data.Entries = map[string]Entry{}

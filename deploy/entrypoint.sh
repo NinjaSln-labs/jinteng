@@ -4,8 +4,8 @@ set -eu
 DIR="${JINTENG_DIR:-/data}"
 mkdir -p "$DIR"
 
-if [ ! -f "$DIR/vault.bin" ]; then
-  echo "jinteng: no vault.bin — initializing under $DIR"
+if [ ! -f "$DIR/jinteng.bin" ]; then
+  echo "jinteng: no jinteng.bin — initializing under $DIR"
   if [ -z "${JINTENG_PASSWORD:-}" ] && [ -z "${JINTENG_PASSWORD_FILE:-}" ]; then
     echo "error: set JINTENG_PASSWORD_FILE (or JINTENG_PASSWORD) before first boot" >&2
     exit 1
