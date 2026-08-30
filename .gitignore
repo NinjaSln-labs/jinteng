@@ -15,3 +15,6 @@
 # local-only handoff (never track)
 HANDOFF.md
 HANDOFF-ARCHIVE/
+
+# local git hooks (core.hooksPath, machine-private)
+.githooks/
