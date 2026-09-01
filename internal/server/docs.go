@@ -117,6 +117,7 @@ func renderDocsHTML(base string) string {
   th { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
   td { color: var(--text); }
   footer { margin-top: 36px; color: var(--muted); font-size: 0.85rem; }
+  footer .icp { opacity: 0.7; }
 </style>
 </head>
 <body>
@@ -175,7 +176,8 @@ jinteng list</pre>
   <footer>
     金縢 · 打开本页即对接说明书 ·
     <a href="/healthz">/healthz</a> ·
-    完整文档见仓库 <code>docs/</code>（client / systemd / cli / security）
+    完整文档见仓库 <code>docs/</code>（client / systemd / cli / security）<br>
+    <span class="icp">冀ICP备2026034374号-1</span>
   </footer>
 </main>
 </body>
