@@ -107,6 +107,18 @@ func renderDocsHTML(base string) string {
     font-size: 12px;
     color: var(--muted);
   }
+  .banner {
+    background: #1a2744;
+    border: 1px solid #2e5a8e;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #8ec0ff;
+    font-size: 0.93rem;
+    margin: 0 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   table { width: 100%%; border-collapse: collapse; margin-top: 8px; }
   th, td {
     text-align: left;
@@ -123,6 +135,7 @@ func renderDocsHTML(base string) string {
 <body>
 <main>
   <p class="pill">无需登录 · 本页不含 Token / 密钥明文</p>
+  <div class="banner">⚠️ 本服务仅供个人自用，不对公众开放。</div>
   <h1>金縢 对接说明</h1>
   <p class="lead">加密密钥库（金縢 / jinteng）。客户端用 URL + API Token 对接；项目 / git / CI / agent 里只写密钥名，用 <code>jinteng run</code> 在运行时注入。</p>
 
