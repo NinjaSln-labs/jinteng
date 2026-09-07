@@ -190,7 +190,8 @@ jinteng list</pre>
     金縢 · 打开本页即对接说明书 ·
     <a href="/healthz">/healthz</a> ·
     完整文档见仓库 <code>docs/</code>（client / systemd / cli / security）<br>
-    <span class="icp">冀ICP备2026034374号-1</span>
+    <span class="icp">冀ICP备2026034374号-1</span> ·
+    <span class="icp">京公网安备11010102000001号</span>
   </footer>
 </main>
 </body>
