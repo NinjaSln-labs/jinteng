@@ -17,6 +17,8 @@ HANDOFF.md
 HANDOFF-ARCHIVE/
 .handoff/
 .commandcode/
+.audit/
+.skill-fit/
 
 # local git hooks (core.hooksPath, machine-private)
 .githooks/
