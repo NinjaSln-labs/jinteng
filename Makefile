@@ -1,4 +1,4 @@
-.PHONY: build test tidy dist clean smoke
+.PHONY: build test tidy dist clean smoke lint
 
 build:
 	mkdir -p bin
@@ -9,6 +9,9 @@ tidy:
 
 test:
 	CGO_ENABLED=0 go test ./...
+
+lint:
+	go vet ./...
 
 dist:
 	bash scripts/build.sh
