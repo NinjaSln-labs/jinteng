@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>金縢（jinteng）服务器安装部署与使用手册</title>
+<meta name="description" content="在公网 Linux 服务器上部署金縢凭据单源服务（自签 TLS ＋ v2 请求签名 ＋ 一次性配对码），并从 macOS／Windows／WSL2／Linux 各端接入与日常使用。">
+<style>
+  :root{--fg:#1c1f24;--mut:#5a6270;--bg:#fff;--line:#e3e7ee;--code:#f6f8fa;--warn:#8a5a00;--warnbg:#fff6e5;--ok:#0b6b3a;--bad:#a32020}
+  @media (prefers-color-scheme: dark){:root{--fg:#dfe3ea;--mut:#9aa4b2;--bg:#12151a;--line:#252b34;--code:#1a1f27;--warn:#e3b341;--warnbg:#241f14;--ok:#5fd69a;--bad:#ff8080}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC","Source Han Sans SC",sans-serif}
+  main{max-width:56rem;margin:0 auto;padding:2.5rem 1.25rem 6rem}
+  h1{font-size:1.9rem;margin:.2rem 0 .4rem;line-height:1.3}
+  h2{font-size:1.3rem;margin:2.6rem 0 .6rem;padding-top:.7rem;border-top:1px solid var(--line)}
+  h3{font-size:1.05rem;margin:1.6rem 0 .4rem}
+  h2 .n{color:var(--mut);font-variant-numeric:tabular-nums;margin-right:.4rem}
+  p{margin:.55rem 0}
+  .sub{color:var(--mut);font-size:.92rem}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,"Cascadia Mono","Noto Sans Mono CJK SC",monospace}
+  code{background:var(--code);padding:.14em .38em;border-radius:4px;font-size:.88em}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:.85rem 1rem;overflow:auto;font-size:.85rem;line-height:1.6}
+  pre code{background:none;padding:0;font-size:1em}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem}
+  th,td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top}
+  th{background:var(--code);font-weight:600}
+  ul,ol{padding-left:1.4rem}
+  li{margin:.28rem 0}
+  .ph{color:var(--bad);font-weight:600}
+  .ok{color:var(--ok);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+  .note{border-left:3px solid var(--line);padding:.1rem .9rem;margin:.9rem 0;color:var(--mut)}
+  .warn{border-left:3px solid var(--warn);background:var(--warnbg);padding:.6rem .9rem;margin:1rem 0;border-radius:0 6px 6px 0}
+  .warn b{color:var(--warn)}
+  nav{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:.7rem 1rem;font-size:.9rem}
+  nav ol{margin:.2rem 0;padding-left:1.3rem;columns:2;column-gap:1.6rem}
+  nav a{color:var(--fg);text-decoration:none}
+  nav a:hover{text-decoration:underline}
+  hr{border:0;border-top:1px solid var(--line);margin:2.5rem 0}
+  @media print{nav{display:none}body{background:#fff;color:#000}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>金縢（jinteng）服务器安装部署与使用手册</h1>
+<p class="sub">适用：在一台公网 Linux 服务器上部署金縢单源凭据服务，并从 macOS／Windows／WSL2／Linux 各端接入。<br>
+本手册里的每一条命令与每一句期望输出，都在 <strong>2026-10-16 用当前 master 二进制实际跑过</strong>（跑法见 §13）；标 <span class="ph">尖括号</span> 的是要你替换的占位符。</p>
+
+<nav>
+<strong>目录</strong>
+<ol>
+<li><a href="#s1">0 先读懂这台服务的形态（5 条硬事实）</a></li>
+<li><a href="#s2">1 前置条件</a></li>
+<li><a href="#s3">2 编译与放置二进制</a></li>
+<li><a href="#s4">3 服务用户与材料目录</a></li>
+<li><a href="#s5">4 systemd＋tmux 单元（发码不停服）</a></li>
+<li><a href="#s6">5 首启：取证书指纹</a></li>
+<li><a href="#s7">6 登记第一台端</a></li>
+<li><a href="#s8">7 日常使用</a></li>
+<li><a href="#s9">8 管理面：发码／撤端／读数</a></li>
+<li><a href="#s10">9 备份与恢复</a></li>
+<li><a href="#s11">10 升级、换监听、重 pin</a></li>
+<li><a href="#s12">11 故障排查</a></li>
+<li><a href="#s13">12 已知天花板（如实标注）</a></li>
+<li><a href="#s14">13 本机实测记录与验证跑法</a></li>
+<li><a href="#s15">14 参数速查</a></li>
+</ol>
+</nav>
+
+<h2 id="s1"><span class="n">0</span>先读懂这台服务的形态（5 条硬事实）</h2>
+<p>照着敲之前先认这五条，能省掉九成的「为什么不行」：</p>
+<ol>
+<li><strong>一个二进制，两种身份。</strong>服务器端是 <code>jinteng serve</code>；每个使用它的机器是一个「端」，用 <code>jinteng init</code> 建立自己的静息材料后通过 HTTPS 取用。没有数据库服务、没有反向代理、没有账号体系。</li>
+<li><strong>服务端只存密文与按端副本。</strong>每条凭据一把数据密钥（DEK），DEK 为<strong>每一个在册且未撤销的端</strong>各包一份。<u>新登记的端不会自动拿到既有凭据</u>——要由某台已写入的端<em>重写一次</em>那条凭据（§7.4，已实测）。</li>
+<li><strong>信任锚是人。</strong>服务端 TLS 证书首启自签（有效期 10 年），各端在 <code>init</code> 时人工核对并固定其 SHA-256 指纹（pin）。客户端<strong>只认这枚指纹，不校验主机名</strong>——所以证书里的域名/SAN 与访问地址不一致并不影响使用，但监听地址一旦定型就不能改（§11）。</li>
+<li><strong>解锁要「口令 ‖ 机器指纹」两个条件同时成立。</strong>端私钥文件被 <code>Argon2id(口令 ‖ 机器指纹)</code> 封存。拷走某端全部材料到别的机器 ⇒ 解不开、也签不出（这是异机取证这条）；只有口令、换了机器 ⇒ 失败。<u>本产品没有恢复机制</u>，忘记口令等于该端材料作废。</li>
+<li><strong>配对码与撤销他人只在 serve 的终端 stdin 上。</strong>服务在跑时，库被独占（bbolt 单写者），第二条进程的 <code>jinteng pair new</code> 抢不到写锁。所以 <strong>发配对码要么在 serve 所在终端敲一行 <code>pair</code>，要么短暂停服</strong>。本手册用 systemd 监管一个 tmux 会话来当那个终端——不停服、不用 FIFO（§4）。</li>
+</ol>
+
+<h2 id="s2"><span class="n">1</span>前置条件</h2>
+<table>
+<tr><th>项</th><th>要求</th><th>自查命令（在服务器上）</th></tr>
+<tr><td>域名解析</td><td><code>jinteng.ninja-sin.tech</code> 的 A 记录指向该机<strong>网卡上真实存在</strong>的公网 IPv4</td><td><code>getent hosts jinteng.ninja-sin.tech; ip -4 addr show</code>（两边地址应能对上）</td></tr>
+<tr><td>端口</td><td><span class="ph">&lt;PORT&gt;</span>（建议 8787）对客户端所在网络可达；云安全组放行 TCP</td><td><code>ss -lntp</code> 起服后应看到监听行</td></tr>
+<tr><td>时钟</td><td>NTP 同步（签名时间窗 <strong>±120 s</strong>，漂了就全是 <code>stale-request</code>）</td><td><code>timedatectl | sed -n '1,6p'</code>；确认 <code>systemd-timesyncd</code> 或 <code>chrony</code> 在跑</td></tr>
+<tr><td>tmux</td><td>≥ 3.x（管理通道靠它持有 stdin）</td><td><code>tmux -V</code>；缺则 <code>apt-get install -y tmux</code></td></tr>
+<tr><td>Go（若服务器自编译）</td><td>Go ≥ 1.27，无需 CGO</td><td><code>/usr/local/go/bin/go version</code></td></tr>
+</table>
+
+<div class="warn"><b>监听地址不能用通配。</b><code>serve</code> 明确拒绝 <code>0.0.0.0</code> 与 <code>::</code>，实测报错原文：<code>jinteng serve: 服务退出: server: 拒绝未指定地址（0.0.0.0／::，请显式写出本机可路由地址）</code>。<strong>没有 <code>-listen</code> 默认绑 127.0.0.1:8787</strong>，公网部署必须显式写地址。二选一：<br>
+① 写解析到本机网卡的域名：<code>-listen jinteng.ninja-sin.tech:<span class="ph">&lt;PORT&gt;</span></code>（证书 SAN 会把域名收进去，最直观）；<br>
+② 写该公网 IP：<code>-listen <span class="ph">&lt;PUB_IP&gt;</span>:<span class="ph">&lt;PORT&gt;</span></code>。<br>
+若域名解析到的地址不在本机网卡上（NAT／弹性 IP 场景），两种都会 bind 失败：改绑<strong>本机真实内网地址</strong>，并在云侧做端口转发到该机——客户端照旧用域名访问即可（客户端只做 pin，不校验主机名）。</div>
+
+<h2 id="s3"><span class="n">2</span>编译与放置二进制</h2>
+<p>无 CGO、纯静态，推荐在一台构建机上交叉编译后拷过去。仓库已有 make 目标：</p>
+<pre><code># 构建机（仓库根）
+make build-linux-amd64 make build-darwin-amd64 make build-windows-amd64
+# 产物
+bin/jinteng-linux-amd64
+bin/jinteng-darwin-amd64
+bin/jinteng-windows-amd64.exe</code></pre>
+<p>服务器自编译也行：<code>CGO_ENABLED=0 go build -o /usr/local/bin/jinteng ./cmd/jinteng</code>。</p>
+<pre><code># 放到服务器
+scp bin/jinteng-linux-amd64 <span class="ph">&lt;SSH_ALIAS&gt;</span>:/tmp/jinteng
+ssh <span class="ph">&lt;SSH_ALIAS&gt;</span> 'install -m 0755 /tmp/jinteng /usr/local/bin/jinteng && /usr/local/bin/jinteng | head -3'</code></pre>
+<p>分发前给每个文件留一个校验和，各端下载后比对（防被中间环节替换）：</p>
+<pre><code>sha256sum bin/jinteng-* &gt; dist-sha256.txt</code></pre>
+<div class="note"><strong>macOS 的架构别看名字猜。</strong>本项目的真机实测那台 Mac 是 Intel（<code>uname -m</code>=x86_64、无 <code>hw.optional.arm64</code>），所以用 <code>darwin/amd64</code>；Apple Silicon 要另出 <code>darwin/arm64</code>。各端先 <code>uname -m</code> 再取件。</div>
+<div class="note"><strong>Windows 的现实障碍。</strong>真机接入时实测：同一份<strong>无签名</strong> <code>windows/amd64</code> PE 在被控机的三个不同目录内都在数秒到数分钟内被 Windows 安全软件删除，登记动作赶在删除前完成、随后的取用全部拿不到输出。两条解法：给该目录加 Defender 排除项（<code>Add-MpPreference -ExclusionPath &lt;目录&gt;</code>，属系统级变更，需管理员与机主同意），或对二进制做代码签名。文档把这列为<strong>未解的分发形态问题</strong>，不是金縢的缺陷。</div>
+
+<h2 id="s4"><span class="n">3</span>服务用户与材料目录</h2>
+<p>服务端静息材料默认落在运行用户的 <code>~/.jinteng/</code>，生产上改用专用目录＋专用用户：</p>
+<pre><code>sudo useradd --system --create-home --home-dir /var/lib/jinteng --shell /usr/sbin/nologin jinteng
+sudo install -d -m 0700 -o jinteng -g jinteng /var/lib/jinteng</code></pre>
+<p>该目录最终会包含 5 件服务端材料，权限都要 <code>0600</code>：</p>
+<table>
+<tr><th>文件</th><th>是什么</th><th>丢了会怎样</th></tr>
+<tr><td><code>jinteng.db</code></td><td>bbolt 单文件库：密文、真名密文、按端 wrap、设备名录、配对记录、nonce 去重表</td><td>全部凭据与名录消失，不可恢复</td></tr>
+<tr><td><code>library.key</code></td><td>服务端库密钥（32 B）：凭据名盲索引 HMAC、名字密文、配对码加密</td><td>盲索引与名字密文全部失效，等同丢库</td></tr>
+<tr><td><code>server.crt</code> / <code>server.key</code></td><td>首启生成的自签 TLS 证书与私钥（SAN 冻结在生成时的监听地址）</td><td>重签＝换指纹＝<strong>每台端都要重 pin</strong>（§11）</td></tr>
+<tr><td><code>events.jsonl</code></td><td>追加式取用事件，五字段硬白名单（<code>ts</code>／<code>device_id</code>／<code>action</code>／<code>outcome</code>／<code>name_blind_index</code>），<u>不含凭据内容</u></td><td>丢使用统计（多端使用统计的分子），不影响凭据</td></tr>
+</table>
+
+<h2 id="s5"><span class="n">4</span>systemd＋tmux 单元（发码不停服）</h2>
+<p>思路：systemd 监管 tmux 的一个<strong>专用会话</strong>，tmux 替 <code>serve</code> 持有那个「终端」的 stdin。发配对码＝往会话里送一行；读码＝抓面板文本。既不需要停服，也不需要手工 FIFO，进程崩溃时 <code>Restart=always</code> 照样生效。</p>
+<p>写 <code>/etc/systemd/system/jinteng.service</code>（把两处 <span class="ph">尖括号</span> 换成你的值）：</p>
+<pre><code>[Unit]
+Description=jinteng 单源凭据服务（自签 TLS ＋ v2 签名面）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jinteng
+Group=jinteng
+Environment=JINTENG_DIR=/var/lib/jinteng
+ExecStartPre=/usr/bin/install -d -m 0700 -o jinteng -g jinteng /var/lib/jinteng
+ExecStart=/usr/bin/tmux -L jinteng -f /dev/null new-session -Ag jinteng "/usr/local/bin/jinteng serve -listen <span class="ph">&lt;LISTEN_HOST&gt;</span>:<span class="ph">&lt;PORT&gt;</span>"
+ExecStop=/usr/bin/tmux -L jinteng kill-session -t jinteng
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl enable --now jinteng
+systemctl status jinteng --no-pager | head -6</code></pre>
+<p>管理命令统一走这个别名（<code>-L jinteng</code> 是私有 socket，与会话隔离；socket 目录会按用户落在 <code>/tmp/tmux-$(id -u jinteng)/</code>）：</p>
+<pre><code>alias jtmux='sudo -u jinteng tmux -L jinteng'
+jtmux ls
+jtmux capture-pane -p -J -S -300 -t jinteng | tail -5</code></pre>
+<p class="sub">直接进终端操作（人肉现场）：<code>sudo -u jinteng tmux -L jinteng attach -t jinteng</code>，脱离按 <code>Ctrl-b d</code>。</p>
+<div class="note"><strong>三条写法上的坑，都是实测踩到的：</strong>
+<ul>
+<li>读面板要带 <code>-J</code>。终端宽度会把 64 位指纹<strong>折成两行</strong>，不拼行就提取失败。</li>
+<li>要读历史得加 <code>-S -300</code>（负数是回滚行数），否则只看到当前屏。</li>
+<li><strong>别在 <code>ExecStart</code> 里把 <code>serve</code> 接管道</strong>（如 <code>| tee</code>）：那样会话里活下来的是 tee，<code>serve</code> 崩了 systemd 也看不出来，<code>Restart=always</code> 形同废掉。要日志就 <code>journalctl -u jinteng</code>（tmux 的输出会进 journal）或事后单独抓面板。</li>
+<li><code>tmux new-session -Ag</code> 在前台跑，配 <code>Type=simple</code>；会话内命令退出⇒会话结束⇒tmux 退出⇒systemd 重启。这条链就是重启保证的来源。</li>
+</ul></div>
+
+<h2 id="s6"><span class="n">5</span>首启：取证书指纹</h2>
+<pre><code>jtmux capture-pane -p -J -S -300 -t jinteng | grep '指纹 (SHA-256)'</code></pre>
+<p>期望输出（实测原文，指纹值会不同）：</p>
+<pre><code>jinteng serve: 正在监听 <span class="ph">&lt;LISTEN_HOST&gt;</span>:<span class="ph">&lt;PORT&gt;</span>
+jinteng TLS 证书已生成，指纹 (SHA-256): <span class="ph">&lt;64 位十六进制&gt;</span></code></pre>
+<p>把这串指纹记进你的运维台账（它是各端 <code>-pin</code> 的取值）。它<strong>不是秘密</strong>——是公钥级材料；但它必须<strong>在服务端屏幕上产生并被人工抄走</strong>，因为 <code>init</code> 阶段的核对等于第一次信任建立（TOFU）。</p>
+<div class="warn"><b>首启就要按最终监听形态起服。</b>证书 SAN 在生成时写定，之后换 <code>-listen</code> 的地址族会<strong>fail-closed</strong>，原文：<code>server: 既有证书 SAN 不含监听地址 "…";本产品不自动换证书——请人工删除 server.crt／server.key 重新签发，并在各端重新核对并固定指纹（pin）</code>。删证重签＝每台端都要重 pin（§11）。</div>
+
+<h2 id="s7"><span class="n">6</span>登记第一台端</h2>
+<h3>6.1 在服务器上发一枚配对码</h3>
+<pre><code>jtmux send-keys -t jinteng 'pair' Enter
+sleep 1; jtmux capture-pane -p -J -S -300 -t jinteng | grep '配对码（一次性' | tail -1</code></pre>
+<p>期望：<code>配对码（一次性，10m0s 内有效）：<span class="ph">&lt;32 位十六进制&gt;</span></code>。它是 128 bit 随机值，<strong>只显示一次、10 分钟内有效、用过即废</strong>；库里只存 <code>HMAC-SHA256(library.key, 码)</code> 的索引与加密载荷，运维误存该文件也不会泄露码本身。</p>
+<h3>6.2 在那台端上 init</h3>
+<pre><code>jinteng init \
+  -url https://<span class="ph">&lt;LISTEN_HOST&gt;</span>:<span class="ph">&lt;PORT&gt;</span> \
+  -pin <span class="ph">&lt;64 位指纹&gt;</span> \
+  -device <span class="ph">&lt;dev-id&gt;</span> \
+  -pair <span class="ph">&lt;32 位配对码&gt;</span></code></pre>
+<p>期望：<code>jinteng: 本端材料已建立并向服务端登记</code>。这一步在那台机器上生成 <code>~/.jinteng/{device.key,config.json}</code>：两把密钥（X25519 加密 ＋ Ed25519 签名）封在 <code>Argon2id(口令 ‖ 机器指纹)</code> 的信封里，口令当场输入（TTY 静默读；无 TTY 时用 <code>JINTENG_PASSFILE</code>，指向的文件权限必须 ≤0600，或 <code>JINTENG_PASSENV</code>）。<strong>空口令直接被拒</strong>。</p>
+<p>机器指纹按平台取自唯一来源：Linux／WSL2 <code>/etc/machine-id</code>、Windows <code>reg query</code> 的 <code>MachineGuid</code>、macOS <code>ioreg</code> 的 <code>IOPlatformUUID</code>——三端都已在真机实跑过。所以<strong>同一物理机上的 WSL2 与 Windows 是两个独立端</strong>（两条指纹渠道取值不同）。</p>
+<div class="note">设备 id 建议用 <code>[A-Za-z0-9_.-]{1,64}</code> 的简单名（它会进事件与名录；服务端硬性规则只是非空、不含 NUL，但纪律一致更好）。</div>
+<div class="warn"><b>登记失败的两种下场要分清。</b>
+<ul><li>码错／过期／用过：登记被拒（<code>invalid-pair-code</code>），<u>码不会被烧掉</u>（判定与消费在同一事务），换一枚或复用未消费的码都可继续。</li>
+<li><code>init</code> 会<strong>先建本地材料再出网登记</strong>。若登记未确认，本地已留下 <code>device.key</code>，重跑会撞：<code>client: 静息材料 device.key 已存在，拒绝覆盖（v0 无恢复机制）</code>。此时要么删掉该端 <code>~/.jinteng/</code> 重来，要么换个 <code>-device</code> id。</li></ul></div>
+
+<h2 id="s8"><span class="n">7</span>日常使用</h2>
+<h3>7.1 命令面</h3>
+<pre><code>jinteng put    &lt;NAME&gt; &lt;value&gt;                          # 写入／覆盖
+jinteng get    &lt;NAME&gt;                                   # 取用并输出明文
+jinteng run    -e &lt;环境变量名&gt;=&lt;凭据名&gt; [-e …] &lt;命令&gt; [参数…]   # 注入子进程 env 后执行
+jinteng devices revoke &lt;本端 id&gt;                         # 撤销自己那端
+jinteng usage  [-window-days 30] [-out &lt;路径&gt;]           # 窗口达标判定／4 读数（本机，不出网）</code></pre>
+<p>凭据名硬规则：<code>[A-Za-z0-9_]{1,64}</code>（<strong>不含</strong>连字符与点），服务端在写库前把关，违反一律 <code>bad-request</code>。同名 <code>put</code> 是覆盖语义。<code>run</code> 会把 <code>JINTENG_*</code> 控制面变量从子进程 env 里剔除后再注入（实测 <code>JINTENG_ENV_LEAK=0</code>）。</p>
+<h3>7.2 退出码</h3>
+<table>
+<tr><th>码</th><th>含义</th><th>典型动作</th></tr>
+<tr><td>0</td><td>成功；<code>run</code> 全链路成功时＝被调用命令自己的退出码</td><td>—</td></tr>
+<tr><td>1</td><td>操作失败（网络／解锁／服务端其它拒绝）</td><td>看 stderr 里的服务端码</td></tr>
+<tr><td>2</td><td>用法错误（发生在任何解锁与联网之前）</td><td>补参数</td></tr>
+<tr><td>3</td><td>凭据名不存在（<code>not-found</code>）</td><td>核对名字规则与拼写</td></tr>
+<tr><td>5</td><td>本端已撤销（<code>device-revoked</code>）</td><td>见 §8.3；撤销是单向门</td></tr>
+<tr><td>6</td><td>该端没有这条名的副本（<code>wrap-missing</code>）</td><td>§7.4：让写入端重写一次</td></tr>
+<tr><td>7</td><td>服务端不可达（<code>ErrUnreachable</code>）</td><td>检查监听／防火墙／DNS；<strong>本产品不提供缓存值</strong></td></tr>
+</table>
+<p class="sub">被 <code>run</code> 调用的命令若自己要用非零退出码，建议 ≥10，以免与上表歧义。</p>
+<h3>7.3 一次最小旅程</h3>
+<pre><code># 在已登记的端上
+jinteng put GIT_TOKEN ghp_xxx…            # 注意：值走 argv（见 §12 天花板）
+jinteng get GIT_TOKEN
+jinteng run -e GH_TOKEN=GIT_TOKEN -- gh auth status
+jinteng usage -window-days 30 | head -20</code></pre>
+<h3>7.4 新端看不到老凭据（最容易困惑的一条，已实测）</h3>
+<pre><code>dev-b 上 jinteng get SHARED
+  → rc=6，jinteng get: client: 该端无此名的 wrap 副本（服务端码 wrap-missing）
+在 dev-a 上把同一条重写一次：jinteng put SHARED 'V1'
+dev-b 上 jinteng get SHARED
+  → V1                                        # 实测结果</code></pre>
+<p>原因：DEK 的按端重包发生在 <strong>写入时</strong>（写入端从服务端名录取全部在册未撤销端）。新登记的端在此之前的任何写入都没带上它。所以每接入一台新端，把需要共享的凭据<strong>重写或轮换一次</strong>。</p>
+
+<h2 id="s9"><span class="n">8</span>管理面：发码／撤端／读数</h2>
+<h3>8.1 配对码</h3>
+<pre><code>jtmux send-keys -t jinteng 'pair' Enter          # 签发一枚（打印一次）
+jtmux send-keys -t jinteng 'pair list' Enter     # 列未消费码的索引前缀与剩余时限
+jtmux send-keys -t jinteng 'pair revoke &lt;前缀&gt;' Enter   # 作废一枚</code></pre>
+<p>读结果一律用 <code>jtmux capture-pane -p -J -S -300 -t jinteng | tail -n 6</code>。</p>
+<h3>8.2 撤销</h3>
+<pre><code>jinteng devices revoke <span class="ph">&lt;本端 id&gt;</span>                 # 端撤自己：期望「jinteng: 设备已撤销」（实测 rc=0）
+jtmux send-keys -t jinteng 'revoke <span class="ph">&lt;dev-id&gt;</span>' Enter   # 撤他端：只能在服务端终端
+# 面板回显：jinteng: 端 <span class="ph">&lt;dev-id&gt;</span> 已撤销（旧 wrap 永不重包，取用面 403）</code></pre>
+<p>网络面上撤销<strong>别人</strong>会被拒（<code>revoke-foreign</code>，403），客户端更是在出网之前就拒并提示走终端——这条发起面是 2026-10-16 的裁定（撤销发起面的既有约束），动机是「一枚泄露的配对码不该换来撤销全部健康端的能力」。</p>
+<h3>8.3 撤销之后想恢复？先读这段</h3>
+<p>撤销是<strong>单向门</strong>，本手册把它写成运维约束：</p>
+<ul>
+<li>被撤端的旧密文副本<strong>不重包</strong>，取用面一律 403；要彻底断绝它能看到的内容，靠<strong>轮换凭据</strong>。</li>
+<li>协议上允许「同一把签名公钥」重登记恢复该 id，但<strong>当前 CLI 做不到</strong>：<code>init</code> 拒绝覆盖已存在的 <code>device.key</code>，也没有单独的重新登记命令。若那台端还活着，等于永久失去该 id。</li>
+<li>结论：<strong>撤销前先确认那台端真的退役了</strong>；需要恢复请按「新设备 id 重新登记」，并且 §7.4 重写凭据。</li>
+</ul>
+<p class="sub">要一条命令完成「不重建材料、只重新登记」，需要一次小的代码改动（新增 <code>reenroll</code>）；那是新 change 的范围，本手册不假装它已存在。</p>
+<h3>8.4 使用读数（窗口达标判定／4）</h3>
+<pre><code>sudo -u jinteng JINTENG_DIR=/var/lib/jinteng /usr/local/bin/jinteng usage -window-days 30</code></pre>
+<p><code>usage</code> 只读 <code>events.jsonl</code>：不 unlock、不出网、不打开库（所以服务在跑也能取数）。要点两条：</p>
+<ul>
+<li><strong>必须在服务端所在机取。</strong>远端自己那份 events 只有 <code>run</code> 没有 <code>get</code>，在远端跑会如实报 <code>devices_with_success=0</code>，那不代表使用统计未达成。</li>
+<li>取用次数与首次成功时间按服务端 <code>get</code> 计；<code>run_ok</code> 单列展示（一次 <code>run</code> 底下必有一条 <code>get</code>，双计会让使用占比 的分子翻倍）。</li>
+</ul>
+<p>实测读数样例（三种都出现过）：</p>
+<pre><code># 达成态（真机三端在册）
+devices_with_success = 3 | criterion1_met = true
+north_star = {numerator: 5, denominator: "not-observable", ratio: null}
+
+# 未达成态（只有一台端用过）——输出会自己说明，不要美化
+"criterion1_met": false
+"窗口内未达标（窗口内 1 台端有成功取用，须≥2）;按 产品前提：需复核前提，如实降级为自用工具"</code></pre>
+
+<h2 id="s10"><span class="n">9</span>备份与恢复</h2>
+<h3>9.1 备份集</h3>
+<p>要备的是<strong>四件</strong>：<code>jinteng.db</code>、<code>library.key</code>、<code>server.crt</code>＋<code>server.key</code>（成对，否则重签换指纹）、<code>events.jsonl</code>（可选，统计用）。库是 bbolt 单文件，<u>正在写的时候拷贝会拿到撕裂副本</u>，所以用「一致性快照」而非 <code>cp</code>：</p>
+<pre><code>sudo -u jinteng /usr/local/bin/jinteng usage -window-days 30 -out /root/jinteng-backup/usage-$(date +%F).json 2>/dev/null
+sudo systemctl stop jinteng                       # 停服取一致快照（库只有服务在写）
+sudo tar -C /var/lib/jinteng -czf /root/jinteng-backup/jinteng-$(date +%FT%H%M).tar.gz .
+sudo chmod 600 /root/jinteng-backup/*.tar.gz
+sudo systemctl start jinteng
+sudo ss -lntp | grep <span class="ph">&lt;PORT&gt;</span>                    # 回来确认在监听</code></pre>
+<div class="warn"><strong>备份必须离线加密。</strong>「同一个目录里的 db ＋ library.key ＋ TLS 私钥」正是本产品的<strong>已知天花板</strong>（同机同权限可还原凭据名、并可解密 TLS 通道）；把这个包原样放到同一台机器或同一个可访问域，等于把天花板搬到备份里。异地／离线＋独立密钥加密，且<strong>别</strong>把它放进任何日志外送或自动同步目录。</div>
+<h3>9.2 恢复</h3>
+<pre><code>sudo systemctl stop jinteng
+sudo tar -C /var/lib/jinteng -xzf /root/jinteng-backup/jinteng-&lt;时间戳&gt;.tar.gz
+sudo chown -R jinteng:jinteng /var/lib/jinteng && sudo chmod 700 /var/lib/jinteng
+sudo find /var/lib/jinteng -maxdepth 1 -type f -exec chmod 600 {} +
+sudo systemctl start jinteng
+# 端到端验证（在一台已登记的端上）
+jinteng get <span class="ph">&lt;某条已存在的凭据名&gt;</span></code></pre>
+<p>恢复不了的三样，先说清楚免得现场慌乱：<strong>忘记的口令</strong>（产品不存、无法重置）；<strong>被撤销端所能见的旧内容</strong>（恢复备份也不会让撤销变成未撤销——以库里状态位为准）；<strong>只备份了 db 却没备份 <code>library.key</code></strong> 的情形（名字密文与盲索引解不开，等同丢库）。</p>
+
+<h2 id="s11"><span class="n">10</span>升级、换监听、重 pin</h2>
+<h3>10.1 常规升级（只换二进制）</h3>
+<pre><code>sudo systemctl stop jinteng
+sudo install -m 0755 /tmp/jinteng-new /usr/local/bin/jinteng
+sudo systemctl start jinteng
+jtmux capture-pane -p -J -S -60 -t jinteng | tail -2      # 应只有「正在监听 …」，不该再出现「证书已生成」
+jinteng usage -window-days 30 >/dev/null && echo 服务端可用</code></pre>
+<p>协议是 <code>/v2</code> 单一版本、<strong>不做版本协商</strong>（本仓没有旧客户端分发渠道）。若未来出现不兼容的线格式改动，各端要一起升级，不能只升服务端。</p>
+<h3>10.2 换监听地址／换证书 ⇒ 每台端都要重 pin</h3>
+<pre><code># 1) 改 jinteng.service 里 -listen 的 host，然后删旧证重签
+sudo systemctl stop jinteng
+sudo rm /var/lib/jinteng/server.crt /var/lib/jinteng/server.key
+sudo systemctl start jinteng
+NEWFP=$(sudo -u jinteng tmux -L jinteng capture-pane -p -J -S -300 -t jinteng | grep -oE 'SHA-256\): [0-9a-f]{64}' | awk '{print $2}')
+echo "新指纹 $NEWFP"
+# 2) 每台端改自己的 pin（材料里的 config.json 只有三个字段）
+#    macOS／Linux：~/.jinteng/config.json；Windows：%USERPROFILE%\.jinteng\config.json
+#    编辑 tls_pin 为 $NEWFP 后：
+jinteng get <span class="ph">&lt;已存在的凭据名&gt;</span>       # 取到即证明 pin 生效；失败会明确报 pin／主机名不匹配
+# 3) 若新地址在旧证书 SAN 里不存在，serve 会 fail-closed 并给出上面这段人工流程的提示</code></pre>
+<p>注意：重 pin <strong>不需要</strong>重新登记（端密钥与名录都没变），也不要为此重发配对码。</p>
+
+<h2 id="s12"><span class="n">11</span>故障排查</h2>
+<h3>11.1 先看这三处</h3>
+<pre><code>systemctl status jinteng --no-pager | head -8        # 服务活着吗
+jtmux capture-pane -p -J -S -300 -t jinteng | tail -15   # serve 自己的输出（含管理命令回显）
+sudo ss -lntp | grep <span class="ph">&lt;PORT&gt;</span>; getent hosts jinteng.ninja-sin.tech   # 在听吗，域名对吗</code></pre>
+<h3>11.2 服务端码 → 原因 → 动作</h3>
+<table>
+<tr><th>码</th><th>原因</th><th>动作</th></tr>
+<tr><td><code>unknown-device</code></td><td>签名头里的设备 id 不在名录</td><td>该端还没登记／id 写错；重新走 §6</td></tr>
+<tr><td><code>bad-signature</code></td><td>验签不通、体侧 id 与头里不一致、签名头残缺</td><td>确认这台端的 <code>device.key</code> 与 <code>config.json</code> 是同一套材料</td></tr>
+<tr><td><code>stale-request</code></td><td>时间戳偏离服务端 &gt;120 s</td><td>两端都开 NTP；虚拟机休眠恢复后常见</td></tr>
+<tr><td><code>replayed</code></td><td>nonce 已用过（去重表落库，重启后仍生效）</td><td>客户端时钟回拨会大量出现；修时钟</td></tr>
+<tr><td><code>device-revoked</code></td><td>本端被撤销</td><td>§8.3（单向门）</td></tr>
+<tr><td><code>invalid-pair-code</code></td><td>码缺失／已消费／超 TTL</td><td>重新发一枚，10 分钟内用完</td></tr>
+<tr><td><code>device-exists</code></td><td>已在册的 id 想用<strong>另一把签名公钥</strong>重登记（顶替闸）</td><td>换 id 登记；或确认这台端的材料没被动过</td></tr>
+<tr><td><code>revoke-foreign</code></td><td>想通过网络面撤别人那端</td><td>改走服务终端 <code>revoke &lt;id&gt;</code></td></tr>
+<tr><td><code>wrap-missing</code></td><td>名存在但该端没有副本</td><td>§7.4：让写入端重写一次该凭据</td></tr>
+<tr><td><code>revoked-device</code></td><td>写入的 wraps 里有已撤销端</td><td>写入端名录已过时；重取名录（新一次取用／写入即可）</td></tr>
+<tr><td><code>bad-device-key</code>／<code>bad-sig-key</code></td><td>登记上报的公钥退化（长度不对／全零）</td><td>材料异常，删该端 <code>~/.jinteng</code> 重登记</td></tr>
+<tr><td><code>audit-failed</code></td><td>事件写不进去（500）⇒ <strong>不发业务结果</strong>，但已提交的库变更不回滚</td><td>查磁盘空间与 <code>events.jsonl</code> 权限；重试语义：<code>put</code>/<code>revoke</code> 幂等，<code>enroll</code> 重试会报 <code>invalid-pair-code</code>（需重新发码）</td></tr>
+</table>
+<h3>11.3 连不上</h3>
+<pre><code># 从端上先分层定位
+nc -vz jinteng.ninja-sin.tech <span class="ph">&lt;PORT&gt;</span>          # 不通＝安全组／防火墙／bind 地址问题
+jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产品绝不回退到本地缓存值</code></pre>
+<p>通但 TLS 失败：pin 对不对（<code>config.json</code> 的 <code>tls_pin</code>）、URL 是不是 <code>https://</code>（明文 http 会被客户端直接拒，因为它绕过 pinning）、证书是否被删过重签（§10.2）。</p>
+
+<h2 id="s13"><span class="n">12</span>已知天花板（如实标注）</h2>
+<ul>
+<li><strong>同机同权限</strong>能读 <code>/var/lib/jinteng</code> 整个目录的人，同时拿到 db 与 <code>library.key</code>，因此能还原凭据名；TLS 私钥也在同一目录。异机取证这条 只主张<strong>材料离开本机即失效</strong>，不主张同机不可读。</li>
+<li><strong>值与配对码走 argv</strong>：<code>jinteng put &lt;NAME&gt; &lt;value&gt;</code> 与 <code>init -pair &lt;码&gt;</code> 的进程参数对本机同权限可见（<code>ps</code>／审计日志）。这是既有形态，不是本次部署能改的口径。</li>
+<li><strong>没有恢复</strong>：忘记口令＝丢该端；<code>device.key</code> 丢了只能作为<strong>新 id</strong> 重新登记，并且重写需要共享的凭据。</li>
+<li><strong>不做端侧缓存</strong>：服务端不可达即退出码 7。离线可用属未来新 change（与异机取证这条／3 直接冲突）。</li>
+<li><strong>不做多用户与权限模型</strong>：一个单源，所有在册端都能取到自己有副本的全部凭据；谁可撤销谁见 §8.2。</li>
+<li><strong>新登记端会成为可信端</strong>：配对码只授登记资格（不含任何解密能力），但登记成功的那一端会在<strong>之后的每次写入</strong>中获得 DEK 副本。所以发码＝授权一台新机器进来，请在服务端屏幕前人工抄码，不要把它接进任何自动化管道。</li>
+<li><strong>不提供 ACME／公网 CA</strong>，也<strong>不建议</strong>套 nginx 反代（反代会接管 TLS 而使 pin 语义失效，且与「不引入外部常驻服务」的设计裁定冲突）。要改这两条属于新 change。</li>
+<li><strong>纯后台自动化取用</strong>需要口令在场（签名与解锁同信封）。定时任务里放 <code>JINTENG_PASSFILE</code> 等于把双要素降为单要素——要这么用请先读 §12 第三条。</li>
+</ul>
+
+<h2 id="s14"><span class="n">13</span>本机实测记录与验证跑法</h2>
+<p>本手册的技术内容在 2026-10-16 于本机（Linux／WSL2，systemd 255，tmux 可用）以<strong>临时材料目录</strong>实跑验证，未触碰任何真实材料；<code>systemd-analyze verify</code> 对 §4 单元返回 rc=0。</p>
+<table>
+<tr><th>验证项</th><th>真实结果</th></tr>
+<tr><td>通配监听</td><td><code>-listen 0.0.0.0:18787</code> 被拒：原文见 §1 警示框</td></tr>
+<tr><td>tmux 驱动管理通道</td><td><code>send-keys 'pair'</code> ⇒ 面板回显 <code>配对码（一次性，10m0s 内有效）：…</code>；<code>send-keys 'revoke dev-doc-test'</code> ⇒ 端被撤，后续取用退出码 5</td></tr>
+<tr><td>登记→写入→取用→注入</td><td><code>init</code> 成功；<code>put</code> 成功；<code>get</code> 逐字节一致；<code>run -e TOK=…</code> 子进程取到注入值（实测 <code>RUN_INJECT=15</code> 字节），且子进程 env 里 <code>JINTENG_*</code> 控制面变量计数为 0（实测 <code>JINTENG_ENV_LEAK=0</code>）</td></tr>
+<tr><td>配对码单次使用</td><td>同码第二次 ⇒ 服务端码 <code>invalid-pair-code</code></td></tr>
+<tr><td>晚登记端</td><td>直接取 ⇒ <code>rc=6 wrap-missing</code>；写入端重写一次 ⇒ 取到值</td></tr>
+<tr><td>自撤与撤后取用</td><td><code>devices revoke <span class="ph">&lt;本端 id&gt;</span></code> rc=0；该端取用 rc=5</td></tr>
+<tr><td>usage 未达成态</td><td>只有一台端有成功取用时 <code>devices_with_success=1</code>、<code>criterion1_met=false</code>，并打印 产品前提 的降级文案（不粉饰）</td></tr>
+</table>
+<p class="sub">想复现：把上面 §4 之后的单元换成 <code>tmux -L <span class="ph">&lt;名&gt;</span> -f /dev/null new-session -d -s s "JINTENG_DIR=<span class="ph">&lt;临时目录&gt;</span>/srv jinteng serve -listen <span class="ph">&lt;本机地址&gt;</span>:<span class="ph">&lt;测试端口&gt;</span>"</code>，其余命令逐条照抄即可。口令请用一次性合成值，落在 0600 文件里，跑完即删。</p>
+
+<h2 id="s15"><span class="n">14</span>参数速查</h2>
+<table>
+<tr><th>参数</th><th>值</th><th>来源</th></tr>
+<tr><td>默认监听</td><td><code>127.0.0.1:8787</code>（不写 <code>-listen</code> 时）</td><td><code>internal/server/server.go</code> <code>defaultListen</code></td></tr>
+<tr><td>通配监听</td><td>拒绝（<code>0.0.0.0</code>／<code>::</code>）</td><td>同上，实测原文</td></tr>
+<tr><td>签名时间窗</td><td>±120 s</td><td><code>internal/sign</code> <code>WindowSeconds</code></td></tr>
+<tr><td>nonce 去重</td><td>每端最近 512 条，落库、重启后仍生效</td><td><code>internal/store</code> <code>nonceRetentionPerDevice</code></td></tr>
+<tr><td>配对码</td><td>128 bit（32 位十六进制），默认 TTL 10 分钟，单次使用</td><td><code>internal/server/pair.go</code> <code>DefaultPairTTL</code></td></tr>
+<tr><td>请求体上限</td><td>1 MiB</td><td><code>internal/server</code> <code>maxBodyBytes</code></td></tr>
+<tr><td>凭据名</td><td><code>[A-Za-z0-9_]{1,64}</code></td><td><code>server.ValidName</code></td></tr>
+<tr><td>设备 id 建议</td><td><code>[A-Za-z0-9_.-]{1,64}</code></td><td>纪律值（服务端硬规则＝非空、不含 NUL）</td></tr>
+<tr><td>证书有效期</td><td>10 年，SAN 生成时冻结，不自动轮换</td><td><code>internal/server/tls.go</code></td></tr>
+<tr><td>口令来源优先级</td><td>TTY &gt; <code>JINTENG_PASSFILE</code>（文件必须 ≤0600）&gt; <code>JINTENG_PASSENV</code>；空口令被拒</td><td><code>internal/client/unlock.go</code></td></tr>
+<tr><td>机器指纹来源</td><td>Linux／WSL2 <code>/etc/machine-id</code>；Windows <code>MachineGuid</code>；macOS <code>IOPlatformUUID</code></td><td><code>internal/fp/fp.go</code>（三端均已真机实跑）</td></tr>
+<tr><td>材料目录覆盖</td><td><code>JINTENG_DIR</code>（缺省 <code>~/.jinteng</code>），目录 0700、文件 0600</td><td><code>internal/material</code></td></tr>
+<tr><td>窗口达标判定 窗口</td><td>30 天，≥2 台端各自成功取用 ≥1 次</td><td><code>docs/product/产品基线-direction.md</code> ＋ 使用统计流水</td></tr>
+</table>
+
+<hr>
+<p class="sub">产品基线：<code>docs/product/产品基线-direction.md</code>（frozen）。部署形态约束：<code>撤销发起面</code>（撤销发起面）、<code>部署形态</code>（systemd 监管 tmux 会话＋自签 pin＋拒绝通配监听）。手册与实现不一致时以 代码与 <code>deploy.html</code>为准，并请回修本文件。</p>
+
+</main>
+</body>
+</html>
