@@ -967,3 +967,54 @@ func mustLibKeyTest(t *testing.T) []byte {
 	}
 	return k
 }
+
+// TestSessionDeleteRemovesSecret：Delete 走真实签名线格式；删除后 Take 返回
+// ErrNotFound，服务端库内也读不到该索引；重复删除与非法名可区分。
+func TestSessionDeleteRemovesSecret(t *testing.T) {
+	e := newEnv(t)
+	pub, priv := makeDevice(t)
+	e.register(t, "dev-a", pub)
+	e.writeConfig(t, "dev-a")
+	e.sealSelf(t, "dev-a", priv)
+	forceEnvPass(t)
+
+	sess, err := Unlock()
+	if err != nil {
+		t.Fatalf("Unlock: %v", err)
+	}
+	defer sess.Close()
+
+	name := "API_TOKEN"
+	if err := sess.Put(name, "V-old"); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, err := sess.Take(name); err != nil {
+		t.Fatalf("删除前 Take: %v", err)
+	}
+	if err := sess.Delete(name); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := sess.Take(name); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("删除后 Take = %v，期望 ErrNotFound", err)
+	}
+	if err := sess.Delete(name); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("重复 Delete = %v，期望 ErrNotFound", err)
+	}
+	if _, _, err := e.openStore(t).GetSecret(mustIndexClientTest(t, name)); err == nil {
+		t.Error("删除后库内仍能读到该索引")
+	}
+	before, err := os.ReadFile(filepath.Join(e.dir, material.EventsFile))
+	if err != nil {
+		t.Fatalf("读事件文件: %v", err)
+	}
+	if err := sess.Delete("bad-name"); err == nil {
+		t.Error("非法名 Delete 应在发请求前拒绝")
+	}
+	after, err := os.ReadFile(filepath.Join(e.dir, material.EventsFile))
+	if err != nil {
+		t.Fatalf("读事件文件: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("非法名 Delete 不应发请求（事件文件被追加）")
+	}
+}

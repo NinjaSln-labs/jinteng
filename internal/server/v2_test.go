@@ -18,9 +18,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NinjaSln-labs/jinteng/internal/audit"
 	"github.com/NinjaSln-labs/jinteng/internal/crypto"
 	"github.com/NinjaSln-labs/jinteng/internal/material"
 	"github.com/NinjaSln-labs/jinteng/internal/sign"
+	"github.com/NinjaSln-labs/jinteng/internal/usage"
 )
 
 // v2 签名面／配对登记／设备名录的行为契约测试。
@@ -713,5 +715,170 @@ func TestConcurrentEnrollSameIDKeepsWinner(t *testing.T) {
 	st2, b2 := e.enrollV2(t, "dev-y", cands[loser].dh, cands[loser].sig, cands[loser].seed, cands[loser].code)
 	if st2 != http.StatusOK {
 		t.Errorf("落败请求的配对码应仍未消费，用于新端登记得 %d %q", st2, b2)
+	}
+}
+
+// TestV2DeleteSecretRemovesAllDeviceAccess：在册端删除后，密文／名字／全部 wrap
+// 在库里消失，所有端取用均为 404；重复删除、缺失、未签名与被撤销端均不改变数据。
+func TestV2DeleteSecretRemovesAllDeviceAccess(t *testing.T) {
+	e := newEnv(t)
+	pubA := e.enrollOK(t, "dev-a")
+	pubB := e.enrollOK(t, "dev-b")
+
+	dek, ct, wrapA := synthSecret(t, pubA)
+	wrapB, err := crypto.WrapDEK(dek, pubB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, body := e.put(t, "dev-a", "db_url", ct, map[string][]byte{"dev-a": wrapA, "dev-b": wrapB}); status != http.StatusOK {
+		t.Fatalf("put = %d body=%q", status, body)
+	}
+	for _, id := range []string{"dev-a", "dev-b"} {
+		if status, body := e.take(t, "db_url", id); status != http.StatusOK {
+			t.Fatalf("%s 删除前取用 = %d body=%q", id, status, body)
+		}
+	}
+
+	if status, body := e.del(t, "db_url", "dev-a"); status != http.StatusOK {
+		t.Fatalf("delete = %d body=%q", status, body)
+	} else if !bytes.Contains(body, []byte(`"deleted"`)) {
+		t.Fatalf("delete 响应 = %q，期望 status=deleted", body)
+	}
+	for _, id := range []string{"dev-a", "dev-b"} {
+		status, body := e.take(t, "db_url", id)
+		if status != http.StatusNotFound || errCode(t, body) != "not-found" {
+			t.Errorf("%s 删除后取用 = %d %q，期望 404 not-found", id, status, body)
+		}
+	}
+	if _, _, err := e.st.GetSecret(mustIndex(t, "db_url")); err == nil {
+		t.Error("删除后 store 仍能读到密文或 wrap")
+	}
+	if status, body := e.del(t, "db_url", "dev-a"); status != http.StatusNotFound || errCode(t, body) != "not-found" {
+		t.Errorf("重复删除 = %d %q，期望 404 not-found", status, body)
+	}
+
+	// 登记前写入、且对该端没有 wrap 副本的凭据：无 wrap 的在册端仍可删除已知名字
+	// （权限与 put 一致；delta spec 场景「无 wrap 副本的在册端仍可删除已知名字」）。
+	_, ctLate, wrapALate := synthSecret(t, pubA)
+	if status, body := e.put(t, "dev-a", "late_join", ctLate, map[string][]byte{"dev-a": wrapALate}); status != http.StatusOK {
+		t.Fatalf("put(late_join) = %d body=%q", status, body)
+	}
+
+	// 未签名删除被拒，数据不变。
+	pubC := e.enrollOK(t, "dev-c")
+	if status, body := e.del(t, "late_join", "dev-c"); status != http.StatusOK {
+		t.Errorf("无 wrap 端删除已知名字 = %d body=%q，期望 200", status, body)
+	}
+	if status, body := e.take(t, "late_join", "dev-a"); status != http.StatusNotFound {
+		t.Errorf("无 wrap 端删除后 dev-a 取用 = %d body=%q，期望 404", status, body)
+	}
+	dek2, ct2, wrapC := synthSecret(t, pubC)
+	wrapA2, err := crypto.WrapDEK(dek2, pubA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, body := e.put(t, "dev-a", "api_token", ct2, map[string][]byte{"dev-a": wrapA2, "dev-c": wrapC}); status != http.StatusOK {
+		t.Fatalf("put(api/token) = %d body=%q", status, body)
+	}
+	if status, body := v2Send(t, e.ts.URL, "dev-a", nil, 0, "", "DELETE", "/v2/secret/api_token", nil, nil); status != http.StatusUnauthorized {
+		t.Errorf("未签名删除 = %d body=%q，期望 401", status, body)
+	}
+	if status, body := e.take(t, "api_token", "dev-a"); status != http.StatusOK {
+		t.Errorf("未签名删除后取用 = %d body=%q，期望数据不变", status, body)
+	}
+
+	// 被撤销端删除被拒，数据不变。
+	if status, body := e.revoke(t, "dev-c"); status != http.StatusOK {
+		t.Fatalf("撤销 dev-c = %d body=%q", status, body)
+	}
+	if status, body := e.del(t, "api_token", "dev-c"); status != http.StatusForbidden {
+		t.Errorf("被撤销端删除 = %d body=%q，期望 403", status, body)
+	}
+	if status, body := e.take(t, "api_token", "dev-a"); status != http.StatusOK {
+		t.Errorf("被撤销端删除失败后取用 = %d body=%q，期望数据不变", status, body)
+	}
+
+	// 缺失名字返回 404。
+	if status, body := e.del(t, "ghost_name", "dev-a"); status != http.StatusNotFound || errCode(t, body) != "not-found" {
+		t.Errorf("删除缺失名字 = %d %q，期望 404 not-found", status, body)
+	}
+}
+
+// TestV2DeleteEventAndUsage：delete 事件为五字段、含正确盲索引、不含明文；
+// 删除不改变成功取用计数（usage 分子）。
+func TestV2DeleteEventAndUsage(t *testing.T) {
+	e := newEnv(t)
+	pub := e.enrollOK(t, "dev-a")
+	_, ct, wrap := synthSecret(t, pub)
+	if status, body := e.put(t, "dev-a", "db_url", ct, map[string][]byte{"dev-a": wrap}); status != http.StatusOK {
+		t.Fatalf("put = %d body=%q", status, body)
+	}
+	if status, body := e.take(t, "db_url", "dev-a"); status != http.StatusOK {
+		t.Fatalf("take = %d body=%q", status, body)
+	}
+	if status, body := e.del(t, "db_url", "dev-a"); status != http.StatusOK {
+		t.Fatalf("delete = %d body=%q", status, body)
+	}
+	if status, body := e.del(t, "ghost_name", "dev-a"); status != http.StatusNotFound {
+		t.Fatalf("删除缺失名字 = %d body=%q，期望 404", status, body)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(e.dir, material.EventsFile))
+	if err != nil {
+		t.Fatalf("读事件文件: %v", err)
+	}
+	var delEvents []map[string]any
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		var m map[string]any
+		if json.Unmarshal(line, &m) != nil {
+			continue
+		}
+		if m["action"] == actionDelete {
+			delEvents = append(delEvents, m)
+		}
+	}
+	if len(delEvents) != 2 {
+		t.Fatalf("delete 事件数 = %d，期望 2（成功＋缺失）", len(delEvents))
+	}
+	byOutcome := map[string]map[string]any{}
+	for _, ev := range delEvents {
+		if len(ev) != len(audit.AllowedFields()) {
+			t.Errorf("delete 事件字段数 = %d，期望 %d", len(ev), len(audit.AllowedFields()))
+		}
+		for _, f := range audit.AllowedFields() {
+			if _, ok := ev[f]; !ok {
+				t.Errorf("delete 事件缺字段 %q", f)
+			}
+		}
+		if ev["device_id"] != "dev-a" {
+			t.Errorf("delete 事件 device_id = %v", ev["device_id"])
+		}
+		outcome, _ := ev["outcome"].(string)
+		byOutcome[outcome] = ev
+	}
+	okEv, deniedEv := byOutcome["ok"], byOutcome["denied"]
+	if okEv == nil || deniedEv == nil {
+		t.Fatalf("delete 事件 outcome 集合 = %v，期望 ok＋denied", byOutcome)
+	}
+	if okEv["name_blind_index"] != mustIndex(t, "db_url") {
+		t.Errorf("delete ok 事件盲索引 = %v，期望 %s", okEv["name_blind_index"], mustIndex(t, "db_url"))
+	}
+	if deniedEv["name_blind_index"] != mustIndex(t, "ghost_name") {
+		t.Errorf("delete denied 事件盲索引 = %v，期望 %s", deniedEv["name_blind_index"], mustIndex(t, "ghost_name"))
+	}
+	if bytes.Contains(raw, []byte(synthPlaintext)) {
+		t.Error("事件文件含凭据明文")
+	}
+
+	rep, err := usage.Aggregate(bytes.NewReader(raw), time.Now(), 30)
+	if err != nil {
+		t.Fatalf("usage.Aggregate: %v", err)
+	}
+	if rep.NorthStar.Numerator != 1 {
+		t.Errorf("usage 分子 = %d，期望 1（delete 不计入）", rep.NorthStar.Numerator)
 	}
 }

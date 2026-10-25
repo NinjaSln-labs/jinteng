@@ -249,6 +249,35 @@ func (s *Store) GetSecret(index string) ([]byte, map[string][]byte, error) {
 	return ct, wraps, nil
 }
 
+// DeleteSecret 硬删除一个盲索引：密文、名字密文与该索引下全部按端 wrap
+// 在同一条写事务内移除。索引不存在返回 ErrNotFound；非法索引在任何写入前拒绝。
+// 不设墓碑：事件日志保留 action=delete 的盲索引审计痕迹，恢复只能重新写入。
+func (s *Store) DeleteSecret(index string) error {
+	if err := validName(index); err != nil {
+		return err
+	}
+	return s.db.Update(func(tx *bolt.Tx) error {
+		if tx.Bucket(bucketSecrets).Get([]byte(index)) == nil {
+			return fmt.Errorf("%w: 凭据索引 %.8s…", ErrNotFound, index)
+		}
+		if err := tx.Bucket(bucketSecrets).Delete([]byte(index)); err != nil {
+			return err
+		}
+		if err := tx.Bucket(bucketNames).Delete([]byte(index)); err != nil {
+			return err
+		}
+		wb := tx.Bucket(bucketWraps)
+		prefix := namePrefix(index)
+		c := wb.Cursor()
+		for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+			if err := c.Delete(); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // encodeDevice 序列化为 revoked(1B)|dh_pub(32B)|sig_pub(32B)＝65 B；
 // 与 bucketDevices 注释一致。旧 33 B 记录（只有一把公钥）在 decode 时被拒绝。
 func encodeDevice(d Device) ([]byte, error) {

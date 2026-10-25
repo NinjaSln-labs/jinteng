@@ -165,6 +165,10 @@ func (e *testEnv) take(t *testing.T, name, deviceID string) (int, []byte) {
 	return e.v2Req(t, deviceID, e.signerFor(t, deviceID), 0, "", "GET", "/v2/secret/"+name, nil)
 }
 
+func (e *testEnv) del(t *testing.T, name, deviceID string) (int, []byte) {
+	return e.v2Req(t, deviceID, e.signerFor(t, deviceID), 0, "", "DELETE", "/v2/secret/"+name, nil)
+}
+
 func (e *testEnv) revoke(t *testing.T, deviceID string) (int, []byte) {
 	body, _ := json.Marshal(map[string]any{"device_id": deviceID})
 	caller := deviceID

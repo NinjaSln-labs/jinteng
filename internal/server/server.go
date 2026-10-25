@@ -1,6 +1,6 @@
 // Package server 是凭据服务的 HTTP 面 v2：登记（POST /v2/enroll）、名录
 // （GET /v2/devices）、写入（POST /v2/secret）、取用（GET /v2/secret/{name}）、
-// 撤销（POST /v2/device/revoke）；每个到达 API 路由的请求写一条取用事件
+// 删除（DELETE /v2/secret/{name}）、撤销（POST /v2/device/revoke）；每个到达 API 路由的请求写一条取用事件
 // （成功与被拒都写，outcome 区分）。v1 路由整体废除，不做版本协商。
 // 除 enroll（由一次性配对码授权、新签名公钥自证）外，每个请求都必须携带
 // 由该端签名私钥产生的有效签名、时间戳与 nonce——「调用者是谁」从声称
@@ -90,6 +90,7 @@ const (
 	actionEnroll  = "enroll"
 	actionPut     = "put"
 	actionGet     = "get"
+	actionDelete  = "delete"
 	actionRevoke  = "revoke"
 	actionDevices = "devices"
 
@@ -173,6 +174,7 @@ func New(st *store.Store, libKey []byte, opts Options) *Server {
 	mux.HandleFunc("GET /v2/devices", s.auth(actionDevices, s.handleDevices))
 	mux.HandleFunc("POST /v2/secret", s.auth(actionPut, s.handlePut))
 	mux.HandleFunc("GET /v2/secret/{name}", s.auth(actionGet, s.handleTake))
+	mux.HandleFunc("DELETE /v2/secret/{name}", s.auth(actionDelete, s.handleDelete))
 	mux.HandleFunc("POST /v2/device/revoke", s.auth(actionRevoke, s.handleRevoke))
 	s.mux = mux
 	return s
@@ -271,6 +273,7 @@ func (s *Server) Listen() error {
 // GET  /v2/devices （签名）                                                    → 200 {"devices":[{id,revoked,dh_pub,sig_pub}]}
 // POST /v2/secret  {"name":s,"ciphertext":b64,"wraps":{deviceID:b64,…}}        → 200 {"status":"stored"}
 // GET  /v2/secret/{name} （签名）                                              → 200 {"ciphertext":b64,"wrap":b64}
+// DELETE /v2/secret/{name} （签名）                                            → 200 {"status":"deleted"}
 // POST /v2/device/revoke {"device_id":s}（签名；body 是被撤销的目标端）        → 200 {"status":"revoked"}
 // 所有非 2xx：{"error": <code>}。请求体里不再有自声明的调用方身份。
 
@@ -464,6 +467,31 @@ func (s *Server) handleTake(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleDelete 删除一条凭据：名字校验与盲索引计算后交给 store 的单事务硬删除。
+// 权限与 put/get 一致：任意在册且未撤销的端可删已知名字；响应只含状态或错误码。
+func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
+	caller := identityOf(r)
+	name := r.PathValue("name")
+	if err := ValidName(name); err != nil {
+		s.reply(w, actionDelete, caller, name, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	index, err := s.blind(name)
+	if err != nil {
+		s.reply(w, actionDelete, caller, name, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	if err := s.st.DeleteSecret(index); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			s.reply(w, actionDelete, caller, name, http.StatusNotFound, codeNotFound)
+		} else {
+			s.reply(w, actionDelete, caller, name, http.StatusBadRequest, codeBadRequest)
+		}
+		return
+	}
+	s.replyOK(w, actionDelete, caller, name, map[string]string{"status": "deleted"})
+}
+
 // handleRevoke 撤销目标端：只置撤销位（不重包），撤销后该端永远取不到
 // 任何既有密文的 wrap——用同一对密钥重新登记会清撤销位并使旧 wrap 复通,彻底断绝
 // 内容仍靠轮换凭据（不重包语义）。
@@ -533,8 +561,9 @@ func (s *Server) reply(w http.ResponseWriter, action, deviceID, name string, sta
 // 事件写不进（含 blind index 派生失败）一律 fail-closed 为 500 audit-failed，
 // 不发业务结果——本产品的可观测性承诺不允许「结果已发但事件缺失」；但已提交
 // 的 store 变更不回滚。由此得到重试语义：put 同名覆盖幂等、
-// revoke 重复撤销幂等；enroll 的配对码在受理前已被消费，因此「500 但已注册」
-// 之后重试必须重新签发一枚配对码（不是报 device-exists 就能续上的路径）。
+// revoke 重复撤销幂等；delete 不幂等，重复删除返回 not-found（客户端退出码 3）；
+// enroll 的配对码在受理前已被消费，因此「500 但已注册」之后重试必须重新签发
+// 一枚配对码（不是报 device-exists 就能续上的路径）。
 // payload 只含状态/错误码/密文材料，绝不含明文。
 func (s *Server) write(w http.ResponseWriter, action, deviceID, name string, status int, payload any) {
 	outcome := outcomeOK

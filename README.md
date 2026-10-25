@@ -33,7 +33,7 @@ jinteng put  GIT_TOKEN <值>
 jinteng run  -e GH_TOKEN=GIT_TOKEN -- gh auth status
 ```
 
-命令面：`init`／`serve`／`put`／`get`／`run`／`devices revoke`／`pair new|list|revoke`／`usage`。
+命令面：`init`／`serve`／`put`／`get`／`delete`／`run`／`devices revoke`／`pair new|list|revoke`／`usage`。
 `usage` 输出每台端的首次成功取用时间与统计窗口内的成功次数，用于观察「多端是否真在被使用」。
 
 ## 构建与验证
@@ -56,6 +56,8 @@ make build-linux-amd64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64
 
 - 拥有服务端材料目录读取权限的人，能同时拿到库文件与库密钥——本产品只主张**材料离开本机即失效**。
 - `put <值>` 与 `init -pair <码>` 走进程参数，对本机同权限可见。
+- `delete <NAME>` 是硬删除：单事务移除该名的密文、名字密文与全部按端封装，产品内不可再取用；
+  存储引擎空闲页不承诺物理擦除。任意在册未撤销端可删除已知名字，权限与写入／取用同级。
 - 撤销是取用面的即时封锁且不重包密文：用同一对密钥重新登记会清撤销位并使旧副本复通，
   要彻底断绝内容仍需轮换凭据。网络面只能撤销自己那端，撤他端属服务器终端的操作员动作。
 - 不做端侧缓存：服务端不可达即以专用退出码失败，绝不回吐旧值。

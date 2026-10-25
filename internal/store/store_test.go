@@ -719,3 +719,125 @@ func TestEnrollRejectsExpiredCode(t *testing.T) {
 		t.Error("过期码不得产生在册端")
 	}
 }
+
+// TestDeleteSecretSemantics：删除在单条写事务内清空 secrets/names/wraps 三桶；
+// 缺失与非法索引不改变数据。
+func TestDeleteSecretSemantics(t *testing.T) {
+	st, _ := openTestStore(t)
+
+	pubA, _ := mustNewDevice(t)
+	pubB, _ := mustNewDevice(t)
+	if err := st.AddDevice("dev-a", pubA, sigPubOf(t)); err != nil {
+		t.Fatalf("AddDevice(dev-a): %v", err)
+	}
+	if err := st.AddDevice("dev-b", pubB, sigPubOf(t)); err != nil {
+		t.Fatalf("AddDevice(dev-b): %v", err)
+	}
+	dek, _ := crypto.NewDEK()
+	ct, err := crypto.SealValue(dek, []byte("v1"))
+	if err != nil {
+		t.Fatalf("SealValue: %v", err)
+	}
+	index := idxOf(t, "db/url")
+	if err := st.PutSecret(index, nameCipherOf(t, "db/url"), ct, map[string][]byte{
+		"dev-a": mustWrap(t, dek, pubA),
+		"dev-b": mustWrap(t, dek, pubB),
+	}); err != nil {
+		t.Fatalf("PutSecret: %v", err)
+	}
+
+	// 非法索引在任何写入前拒绝，既有数据不变。
+	for _, bad := range []string{"", "x\x00y"} {
+		if err := st.DeleteSecret(bad); err == nil {
+			t.Errorf("DeleteSecret(%q) 应返回 error", bad)
+		}
+	}
+	if _, wraps, err := st.GetSecret(index); err != nil || len(wraps) != 2 {
+		t.Fatalf("非法删除后既有数据被改动: wraps=%d err=%v", len(wraps), err)
+	}
+
+	// 缺失索引返回 ErrNotFound。
+	if err := st.DeleteSecret(idxOf(t, "ghost/name")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("DeleteSecret(缺失) = %v, 期望 ErrNotFound", err)
+	}
+
+	if err := st.DeleteSecret(index); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
+	}
+	if _, _, err := st.GetSecret(index); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("删除后 GetSecret = %v, 期望 ErrNotFound", err)
+	}
+	if err := st.DeleteSecret(index); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("重复删除 = %v, 期望 ErrNotFound", err)
+	}
+
+	// 原始三桶：secrets/names 无该键，wraps 无该前缀。
+	if err := st.db.View(func(tx *bolt.Tx) error {
+		if v := tx.Bucket(bucketSecrets).Get([]byte(index)); v != nil {
+			t.Error("删除后 secrets 桶仍残留密文")
+		}
+		if v := tx.Bucket(bucketNames).Get([]byte(index)); v != nil {
+			t.Error("删除后 names 桶仍残留名字密文")
+		}
+		prefix := namePrefix(index)
+		c := tx.Bucket(bucketWraps).Cursor()
+		for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+			t.Errorf("删除后 wraps 桶仍残留键 %q", k)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("检查桶: %v", err)
+	}
+}
+
+// TestDeleteThenRePutLeavesNoOldWraps：删除后同名重写只保留新批次 wrap，
+// 旧密文与旧 wrap 不残留。
+func TestDeleteThenRePutLeavesNoOldWraps(t *testing.T) {
+	st, _ := openTestStore(t)
+
+	pubA, _ := mustNewDevice(t)
+	pubB, _ := mustNewDevice(t)
+	if err := st.AddDevice("dev-a", pubA, sigPubOf(t)); err != nil {
+		t.Fatalf("AddDevice(dev-a): %v", err)
+	}
+	if err := st.AddDevice("dev-b", pubB, sigPubOf(t)); err != nil {
+		t.Fatalf("AddDevice(dev-b): %v", err)
+	}
+	dek, _ := crypto.NewDEK()
+	index := idxOf(t, "api/token")
+	ct1, err := crypto.SealValue(dek, []byte("v1"))
+	if err != nil {
+		t.Fatalf("SealValue(v1): %v", err)
+	}
+	if err := st.PutSecret(index, nameCipherOf(t, "api/token"), ct1, map[string][]byte{
+		"dev-a": mustWrap(t, dek, pubA),
+		"dev-b": mustWrap(t, dek, pubB),
+	}); err != nil {
+		t.Fatalf("PutSecret(v1): %v", err)
+	}
+	if err := st.DeleteSecret(index); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
+	}
+
+	ct2, err := crypto.SealValue(dek, []byte("v2"))
+	if err != nil {
+		t.Fatalf("SealValue(v2): %v", err)
+	}
+	wrapB2 := mustWrap(t, dek, pubB)
+	if err := st.PutSecret(index, nameCipherOf(t, "api/token"), ct2, map[string][]byte{"dev-b": wrapB2}); err != nil {
+		t.Fatalf("PutSecret(v2): %v", err)
+	}
+	gotCT, gotWraps, err := st.GetSecret(index)
+	if err != nil {
+		t.Fatalf("GetSecret: %v", err)
+	}
+	if !bytes.Equal(gotCT, ct2) {
+		t.Error("重写后密文不是新值")
+	}
+	if len(gotWraps) != 1 || !bytes.Equal(gotWraps["dev-b"], wrapB2) {
+		t.Errorf("重写后 wrap 集合异常: %v", gotWraps)
+	}
+	if _, ok := gotWraps["dev-a"]; ok {
+		t.Error("重写后仍残留 dev-a 的旧 wrap")
+	}
+}

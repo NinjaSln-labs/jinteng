@@ -47,6 +47,7 @@ const usageText = `用法: jinteng <命令> [参数]
   serve  [-listen 127.0.0.1:8787]                                  启动 TLS 服务（首次生成证书并打印指纹）
   put    <name> <value>                                            写入／覆盖一条凭据
   get    <name>                                                    取用并输出明文
+  delete <name>                                                    删除一条凭据（硬删除;不可恢复）
   run    -e <变量名>=<凭据名> [-e ...] <命令> [args...]              注入 env 后执行子进程
   devices revoke <本端 id>                                         撤销本端（取用面即时封锁;撤他端走 serve 终端）
   pair new [-ttl 10m]                                              签发一次性配对码（打印到本终端，人工抄到新端）
@@ -70,6 +71,8 @@ func cli(args []string, stdout, stderr io.Writer) int {
 		return cmdPut(args[1:], stdout, stderr)
 	case "get":
 		return cmdGet(args[1:], stdout, stderr)
+	case "delete":
+		return cmdDelete(args[1:], stdout, stderr)
 	case "run":
 		return cmdRun(args[1:], stdout, stderr)
 	case "devices":
@@ -222,6 +225,28 @@ func cmdGet(args []string, stdout, stderr io.Writer) int {
 	}
 	stdout.Write(v)
 	fmt.Fprintln(stdout)
+	return 0
+}
+
+func cmdDelete(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("delete", stderr)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "用法: jinteng delete <name>")
+		return 2
+	}
+	sess, code := openSession(stderr)
+	if sess == nil {
+		return code
+	}
+	defer sess.Close()
+	if err := sess.Delete(fs.Arg(0)); err != nil {
+		fmt.Fprintln(stderr, "jinteng delete:", err)
+		return exitOf(err)
+	}
+	fmt.Fprintln(stdout, "jinteng: 凭据已删除")
 	return 0
 }
 

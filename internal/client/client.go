@@ -158,7 +158,7 @@ func responseError(status int, body []byte) error {
 	case "not-found":
 		return fmt.Errorf("%w（服务端码 not-found）", ErrNotFound)
 	case "audit-failed":
-		return fmt.Errorf("%w：操作可能已生效，只是事件未能记录；重试语义：put/revoke 幂等,enroll 的配对码与落库同事务提交,故重试会因码已消费报 invalid-pair-code（需重新签发一枚码）", ErrAuditFailed)
+		return fmt.Errorf("%w：操作可能已生效，只是事件未能记录；重试语义：put/revoke 幂等；delete 若已生效，重试会得 not-found（退出码 3）；enroll 的配对码与落库同事务提交，故重试会因码已消费报 invalid-pair-code（需重新签发一枚码）", ErrAuditFailed)
 	case "device-exists":
 		return errors.New("client: 该设备 id 已在服务端登记（若此前遇到 audit-failed，这是重试的预期结果——设备已注册成功）")
 	case "":
@@ -390,6 +390,26 @@ func (s *Session) Take(name string) ([]byte, error) {
 		return nil, errors.New("client: 解密凭据值失败")
 	}
 	return plain, nil
+}
+
+// Delete 删除一条凭据：签名 DELETE → 服务端硬删除密文、名字密文与全部按端 wrap。
+// 名字不存在返回 ErrNotFound；非法名在发请求前拒绝；响应不返回任何凭据内容。
+func (s *Session) Delete(name string) error {
+	if err := s.locked(); err != nil {
+		return err
+	}
+	if err := server.ValidName(name); err != nil {
+		return errors.New("client: 非法凭据名（规则 [A-Za-z0-9_]{1,64}）")
+	}
+	resp, err := s.do("DELETE", "/v2/secret/"+name, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errorFromResp(resp)
+	}
+	return nil
 }
 
 // actionRun 是客户端面独有的取用事件（服务端四路由不使用 run；属事件动作枚举）。

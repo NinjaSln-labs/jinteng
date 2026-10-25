@@ -104,3 +104,39 @@ func TestGetExitCode7WhenUnreachable(t *testing.T) {
 		t.Errorf("包装后仍须映射 7，得 %d", code)
 	}
 }
+
+// TestDeleteUsageErrors：delete 的参数面必须在解锁与联网之前拒绝，
+// usage 文本必须列出 delete <name>。
+func TestDeleteUsageErrors(t *testing.T) {
+	t.Setenv("JINTENG_DIR", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	if code := cli([]string{"delete"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("缺少 name 应得退出码 2，得 %d", code)
+	}
+	if !strings.Contains(stderr.String(), "用法: jinteng delete <name>") {
+		t.Errorf("delete usage 错误文本 = %q", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := cli([]string{"delete", "a", "b"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("多余参数应得退出码 2，得 %d", code)
+	}
+}
+
+// TestUsageTextMentionsDelete：顶层 usage 必须列出 delete 命令。
+func TestUsageTextMentionsDelete(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := cli(nil, &stdout, &stderr); code != 2 {
+		t.Fatalf("空命令应得退出码 2，得 %d", code)
+	}
+	if !strings.Contains(stderr.String(), "delete <name>") {
+		t.Errorf("顶层 usage 未列出 delete <name>：%q", stderr.String())
+	}
+}
+
+// TestDeleteNotFoundExitCode：未找到必须映射到既有退出码 3。
+func TestDeleteNotFoundExitCode(t *testing.T) {
+	if code := exitOf(client.ErrNotFound); code != 3 {
+		t.Errorf("ErrNotFound 应映射退出码 3，得 %d", code)
+	}
+}

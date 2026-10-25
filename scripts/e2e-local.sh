@@ -6,7 +6,8 @@
 #   TLS 指纹）→ init -pair（吃真指纹面：不设
 #   JINTENG_FP_OVERRIDE_DIR，由 fp.Get() 读本机 /etc/machine-id）→ put×2 →
 #   get（输出与合成值逐字节比对，比对在内存）→ run -e（子进程断言注入值
-#   正确、且继承 env 里没有任何 JINTENG_ 前缀控制面变量）→ devices revoke →
+#   正确、且继承 env 里没有任何 JINTENG_ 前缀控制面变量）→ delete →
+#   再 get（必须拿退出码 3）→ 同名重写 → 再 get 新值 → devices revoke →
 #   再 get（必须拿退出码 5）。
 # 收尾把「服务端全部可见面」（jinteng.db＋events.jsonl＋config.json＋
 # server.crt/server.key）用 strings＋grep -a 两路扫描，断言不含任何本次
@@ -175,7 +176,7 @@ ev_expect() { # $1=action $2=outcome $3=期望计数
 }
 
 # 实际成功次数由脚本逐条核实的退出码累积，最后与事件账对照。
-succ_enroll=0; succ_put=0; succ_getsrv=0; succ_run=0; succ_revoke=0; succ_getdenied=0
+succ_enroll=0; succ_put=0; succ_getsrv=0; succ_run=0; succ_delete=0; succ_revoke=0; succ_getdenied=0
 
 # ---- 旅程 ----
 cli 0 "init" init -url "https://127.0.0.1:$PORT" -pin "$PIN" -device "$DEVICE" -pair "$PAIR_CODE" >/dev/null
@@ -212,6 +213,21 @@ succ_getsrv=$((succ_getsrv + 1)) # 一次 run -e ⇒ 服务端一次 get ＋客�
 printf '%s' "$runout" | grep -q '^RUN_OK$' || fail "run 子进程断言脚本未打印 RUN_OK"
 note "run 成功：注入值摘要对照一致，且子进程 env 无任何 JINTENG_ 前缀控制面变量"
 
+# delete：硬删除 E2E_CRED_B → 再 get 必须退出码 3 → 同名重写 → 再 get 新值。
+cli 0 "delete E2E_CRED_B" delete E2E_CRED_B >/dev/null
+succ_delete=$((succ_delete + 1))
+cli 3 "get(删除后)" get E2E_CRED_B >/dev/null
+succ_getdenied=$((succ_getdenied + 1))
+note "delete 成功：删除后 get 如约定拿到退出码 3（ErrNotFound）"
+
+VAL_B2="$(printf 'E2E-ROTATED-%s' "$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')")"
+cli 0 "put E2E_CRED_B(删除后重写)" put E2E_CRED_B "$VAL_B2" >/dev/null
+succ_put=$((succ_put + 1))
+got="$(cli 0 "get E2E_CRED_B(重写后)" get E2E_CRED_B)"
+succ_getsrv=$((succ_getsrv + 1))
+[ "$got" = "$VAL_B2" ] || fail "删除后重写的 get 输出不符（摘要=$(digest "$got")）"
+note "删除后同名重写与取回成功（摘要=$(digest "$got")）"
+
 cli 0 "devices revoke" devices revoke "$DEVICE" >/dev/null
 succ_revoke=$((succ_revoke + 1))
 note "devices revoke 成功"
@@ -225,6 +241,7 @@ ev_expect enroll ok "$succ_enroll"
 ev_expect put ok "$succ_put"
 ev_expect get ok "$succ_getsrv"
 ev_expect run ok "$succ_run"
+ev_expect delete ok "$succ_delete"
 ev_expect revoke ok "$succ_revoke"
 ev_expect get denied "$succ_getdenied"
 
@@ -258,13 +275,13 @@ scan_face() { # $1=文件 $2=值 $3=面标签
   fi
   SCAN_ROUTES=$((SCAN_ROUTES + 1))
 }
-for v in "$VAL_A" "$VAL_B" "$JINTENG_PASSENV"; do
+for v in "$VAL_A" "$VAL_B" "$VAL_B2" "$JINTENG_PASSENV"; do
   for f in "${SURFACE[@]}"; do
     scan_face "$MATS/$f" "$v" "可见面"
   done
   # device.key 也在盘上，顺手断言口令同样不在其信封明文里（信封本身是密文）。
   scan_face "$MATS/device.key" "$v" "device.key"
 done
-note "零明文扫描：${#SURFACE[@]} 件可见面＋device.key × 3 个合成值 × grep -a／strings 两路，实际执行 $SCAN_ROUTES 路（$((${#SURFACE[@]} + 1))×3×2），命中 0"
+note "零明文扫描：${#SURFACE[@]} 件可见面＋device.key × 4 个合成值 × grep -a／strings 两路，实际执行 $SCAN_ROUTES 路（$((${#SURFACE[@]} + 1))×4×2），命中 0"
 
 note "断言全部通过；进入收尾（kill serve → /proc 复查 → 删除临时目录）"

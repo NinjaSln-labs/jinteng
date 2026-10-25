@@ -45,7 +45,7 @@
 
 <h1>金縢（jinteng）服务器安装部署与使用手册</h1>
 <p class="sub">适用：在一台公网 Linux 服务器上部署金縢单源凭据服务，并从 macOS／Windows／WSL2／Linux 各端接入。<br>
-本手册里的每一条命令与每一句期望输出，都在 <strong>2026-10-16 用当前 master 二进制实际跑过</strong>（跑法见 §13）；标 <span class="ph">尖括号</span> 的是要你替换的占位符。</p>
+本手册里的每一条命令与每一句期望输出，都在 <strong>2026-10-26 用当前 master 二进制实际跑过</strong>（2026-10-16 首版，10-26 增补 delete；跑法见 §13）；标 <span class="ph">尖括号</span> 的是要你替换的占位符。</p>
 
 <nav>
 <strong>目录</strong>
@@ -191,6 +191,7 @@ sleep 1; jtmux capture-pane -p -J -S -300 -t jinteng | grep '配对码（一次�
 <h3>7.1 命令面</h3>
 <pre><code>jinteng put    &lt;NAME&gt; &lt;value&gt;                          # 写入／覆盖
 jinteng get    &lt;NAME&gt;                                   # 取用并输出明文
+jinteng delete &lt;NAME&gt;                                   # 硬删除（产品内不可恢复）
 jinteng run    -e &lt;环境变量名&gt;=&lt;凭据名&gt; [-e …] &lt;命令&gt; [参数…]   # 注入子进程 env 后执行
 jinteng devices revoke &lt;本端 id&gt;                         # 撤销自己那端
 jinteng usage  [-window-days 30] [-out &lt;路径&gt;]           # 窗口达标判定／4 读数（本机，不出网）</code></pre>
@@ -201,7 +202,7 @@ jinteng usage  [-window-days 30] [-out &lt;路径&gt;]           # 窗口达标�
 <tr><td>0</td><td>成功；<code>run</code> 全链路成功时＝被调用命令自己的退出码</td><td>—</td></tr>
 <tr><td>1</td><td>操作失败（网络／解锁／服务端其它拒绝）</td><td>看 stderr 里的服务端码</td></tr>
 <tr><td>2</td><td>用法错误（发生在任何解锁与联网之前）</td><td>补参数</td></tr>
-<tr><td>3</td><td>凭据名不存在（<code>not-found</code>）</td><td>核对名字规则与拼写</td></tr>
+<tr><td>3</td><td>凭据名不存在（<code>not-found</code>；<code>delete</code> 删除不存在的名字同样走 3）</td><td>核对名字规则与拼写</td></tr>
 <tr><td>5</td><td>本端已撤销（<code>device-revoked</code>）</td><td>见 §8.3；撤销是单向门</td></tr>
 <tr><td>6</td><td>该端没有这条名的副本（<code>wrap-missing</code>）</td><td>§7.4：让写入端重写一次</td></tr>
 <tr><td>7</td><td>服务端不可达（<code>ErrUnreachable</code>）</td><td>检查监听／防火墙／DNS；<strong>本产品不提供缓存值</strong></td></tr>
@@ -212,6 +213,7 @@ jinteng usage  [-window-days 30] [-out &lt;路径&gt;]           # 窗口达标�
 jinteng put GIT_TOKEN ghp_xxx…            # 注意：值走 argv（见 §12 天花板）
 jinteng get GIT_TOKEN
 jinteng run -e GH_TOKEN=GIT_TOKEN -- gh auth status
+jinteng delete GIT_TOKEN                  # 硬删除；随后 get 应得 rc=3
 jinteng usage -window-days 30 | head -20</code></pre>
 <h3>7.4 新端看不到老凭据（最容易困惑的一条，已实测）</h3>
 <pre><code>dev-b 上 jinteng get SHARED
@@ -220,6 +222,13 @@ jinteng usage -window-days 30 | head -20</code></pre>
 dev-b 上 jinteng get SHARED
   → V1                                        # 实测结果</code></pre>
 <p>原因：DEK 的按端重包发生在 <strong>写入时</strong>（写入端从服务端名录取全部在册未撤销端）。新登记的端在此之前的任何写入都没带上它。所以每接入一台新端，把需要共享的凭据<strong>重写或轮换一次</strong>。</p>
+
+<h3>7.5 删除一条凭据</h3>
+<pre><code>jinteng delete GIT_TOKEN          # 期望「jinteng: 凭据已删除」，rc=0
+jinteng get GIT_TOKEN             # rc=3（not-found）
+</code></pre>
+<p>删除在服务端是<strong>单事务硬删除</strong>：该名字的密文、名字密文与该索引下全部按端封装一并移除；随后任何端取用都得到可区分的未找到。权限与写入／取用同级——任意在册且未撤销的端都可以删除已知名字，不要求调用方能解密。删除成功或拒绝都会落一条 <code>action=delete</code> 的五字段事件，名字只以盲索引出现；<code>usage</code> 的成功取用计数不受影响。</p>
+<div class="warn"><b>删除不可恢复。</b>没有回收站，也没有服务端备份；若要重新使用该名字，只能重新 <code>put</code>。另外，「删除」指产品键空间内不可再取用，不承诺对存储介质做物理擦除（数据库空闲页可能保留旧字节）。</div>
 
 <h2 id="s9"><span class="n">8</span>管理面：发码／撤端／读数</h2>
 <h3>8.1 配对码</h3>
@@ -338,7 +347,7 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 </ul>
 
 <h2 id="s14"><span class="n">13</span>本机实测记录与验证跑法</h2>
-<p>本手册的技术内容在 2026-10-16 于本机（Linux／WSL2，systemd 255，tmux 可用）以<strong>临时材料目录</strong>实跑验证，未触碰任何真实材料；<code>systemd-analyze verify</code> 对 §4 单元返回 rc=0。</p>
+<p>本手册的技术内容在 2026-10-16 于本机（Linux／WSL2，systemd 255，tmux 可用）以<strong>临时材料目录</strong>实跑验证，未触碰任何真实材料；<code>systemd-analyze verify</code> 对 §4 单元返回 rc=0。2026-10-26 在同一口径下增补 delete／同名重写实测（见下表）。</p>
 <table>
 <tr><th>验证项</th><th>真实结果</th></tr>
 <tr><td>通配监听</td><td><code>-listen 0.0.0.0:18787</code> 被拒：原文见 §1 警示框</td></tr>
@@ -346,6 +355,7 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 <tr><td>登记→写入→取用→注入</td><td><code>init</code> 成功；<code>put</code> 成功；<code>get</code> 逐字节一致；<code>run -e TOK=…</code> 子进程取到注入值（实测 <code>RUN_INJECT=15</code> 字节），且子进程 env 里 <code>JINTENG_*</code> 控制面变量计数为 0（实测 <code>JINTENG_ENV_LEAK=0</code>）</td></tr>
 <tr><td>配对码单次使用</td><td>同码第二次 ⇒ 服务端码 <code>invalid-pair-code</code></td></tr>
 <tr><td>晚登记端</td><td>直接取 ⇒ <code>rc=6 wrap-missing</code>；写入端重写一次 ⇒ 取到值</td></tr>
+<tr><td>删除与同名重写</td><td><code>delete <span class="ph">&lt;NAME&gt;</span></code> rc=0；随后 <code>get</code> rc=3；同名重写后取回新值；事件账出现 <code>action=delete outcome=ok</code>，<code>usage</code> 成功取用计数不变</td></tr>
 <tr><td>自撤与撤后取用</td><td><code>devices revoke <span class="ph">&lt;本端 id&gt;</span></code> rc=0；该端取用 rc=5</td></tr>
 <tr><td>usage 未达成态</td><td>只有一台端有成功取用时 <code>devices_with_success=1</code>、<code>criterion1_met=false</code>，并打印 产品前提 的降级文案（不粉饰）</td></tr>
 </table>
@@ -367,6 +377,7 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 <tr><td>机器指纹来源</td><td>Linux／WSL2 <code>/etc/machine-id</code>；Windows <code>MachineGuid</code>；macOS <code>IOPlatformUUID</code></td><td><code>internal/fp/fp.go</code>（三端均已真机实跑）</td></tr>
 <tr><td>材料目录覆盖</td><td><code>JINTENG_DIR</code>（缺省 <code>~/.jinteng</code>），目录 0700、文件 0600</td><td><code>internal/material</code></td></tr>
 <tr><td>窗口达标判定 窗口</td><td>30 天，≥2 台端各自成功取用 ≥1 次</td><td><code>docs/product/产品基线-direction.md</code> ＋ 使用统计流水</td></tr>
+<tr><td>删除语义</td><td>单事务硬删除密文／名字密文／全部按端 wrap；产品内不可恢复，不承诺物理擦除</td><td><code>internal/store</code> <code>DeleteSecret</code></td></tr>
 </table>
 
 <hr>
