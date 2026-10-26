@@ -180,7 +180,7 @@ sleep 1; jtmux capture-pane -p -J -S -300 -t jinteng | grep '配对码（一次�
   -pin <span class="ph">&lt;64 位指纹&gt;</span> \
   -device <span class="ph">&lt;dev-id&gt;</span> \
   -pair <span class="ph">&lt;32 位配对码&gt;</span></code></pre>
-<p>期望：<code>jinteng: 本端材料已建立并向服务端登记</code>。这一步在那台机器上生成 <code>~/.jinteng/{device.key,config.json}</code>：两把密钥（X25519 加密 ＋ Ed25519 签名）封在 <code>Argon2id(口令 ‖ 机器指纹)</code> 的信封里，口令当场输入（TTY 静默读；无 TTY 时用 <code>JINTENG_PASSFILE</code>，指向的文件权限必须 ≤0600，或 <code>JINTENG_PASSENV</code>）。<strong>空口令直接被拒</strong>。</p>
+<p>期望：<code>jinteng: 本端材料已建立并向服务端登记</code>。这一步在那台机器上生成 <code>~/.jinteng/{device.key,config.json}</code>：两把密钥（X25519 加密 ＋ Ed25519 签名）封在 <code>Argon2id(口令 ‖ 机器指纹)</code> 的信封里，口令首次输入（设置了 <code>JINTENG_PASSFILE</code> 时直接读取该文件，文件权限必须 ≤0600；否则 TTY 静默读；无 TTY 时可用 <code>JINTENG_PASSENV</code>）。<strong>空口令直接被拒</strong>。</p>
 <p>机器指纹按平台取自唯一来源：Linux／WSL2 <code>/etc/machine-id</code>、Windows <code>reg query</code> 的 <code>MachineGuid</code>、macOS <code>ioreg</code> 的 <code>IOPlatformUUID</code>——三端都已在真机实跑过。所以<strong>同一物理机上的 WSL2 与 Windows 是两个独立端</strong>（两条指纹渠道取值不同）。</p>
 <div class="note">设备 id 建议用 <code>[A-Za-z0-9_.-]{1,64}</code> 的简单名（它会进事件与名录；服务端硬性规则只是非空、不含 NUL，但纪律一致更好）。</div>
 <div class="warn"><b>登记失败的两种下场要分清。</b>
@@ -373,7 +373,7 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 <tr><td>凭据名</td><td><code>[A-Za-z0-9_]{1,64}</code></td><td><code>server.ValidName</code></td></tr>
 <tr><td>设备 id 建议</td><td><code>[A-Za-z0-9_.-]{1,64}</code></td><td>纪律值（服务端硬规则＝非空、不含 NUL）</td></tr>
 <tr><td>证书有效期</td><td>10 年，SAN 生成时冻结，不自动轮换</td><td><code>internal/server/tls.go</code></td></tr>
-<tr><td>口令来源优先级</td><td>TTY &gt; <code>JINTENG_PASSFILE</code>（文件必须 ≤0600）&gt; <code>JINTENG_PASSENV</code>；空口令被拒</td><td><code>internal/client/unlock.go</code></td></tr>
+<tr><td>口令来源优先级</td><td><code>JINTENG_PASSFILE</code>（文件必须 ≤0600）&gt; TTY &gt; <code>JINTENG_PASSENV</code>；空口令被拒</td><td><code>internal/client/unlock.go</code></td></tr>
 <tr><td>机器指纹来源</td><td>Linux／WSL2 <code>/etc/machine-id</code>；Windows <code>MachineGuid</code>；macOS <code>IOPlatformUUID</code></td><td><code>internal/fp/fp.go</code>（三端均已真机实跑）</td></tr>
 <tr><td>材料目录覆盖</td><td><code>JINTENG_DIR</code>（缺省 <code>~/.jinteng</code>），目录 0700、文件 0600</td><td><code>internal/material</code></td></tr>
 <tr><td>窗口达标判定 窗口</td><td>30 天，≥2 台端各自成功取用 ≥1 次</td><td><code>docs/product/产品基线-direction.md</code> ＋ 使用统计流水</td></tr>
