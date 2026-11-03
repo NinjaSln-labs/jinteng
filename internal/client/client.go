@@ -1,5 +1,5 @@
 // Package client 是本端取用面：双要素解锁（口令 ‖ 机器指纹）后的 Session 提供
-// Put/Take/Run/Revoke，全部经服务端 HTTP 面（TLS 指纹 pinning），凭据明文只在
+// Put/Take/List/Run/Revoke，全部经服务端 HTTP 面（TLS 指纹 pinning），凭据明文只在
 // 本端内存与子进程 env 中出现，绝不落盘、绝不进 error 文本、绝不进事件。
 //
 // 密钥生命周期：X25519 私钥与 Ed25519 签名 seed 只在 Unlock 成功
@@ -410,6 +410,33 @@ func (s *Session) Delete(name string) error {
 		return errorFromResp(resp)
 	}
 	return nil
+}
+
+// List 读本端可取用的凭据名名册：GET /v2/secrets。服务端只回该端持有 wrap 副本的
+// 名，所以名册恰好等于「这台端 get 得动的集合」——登记之前写入的凭据既不出现，
+// 也取不到（同 ErrWrapMissing）。名册反映服务端现态：不可达即 ErrUnreachable，
+// 绝不回吐旧值（本包不做任何跨命令缓存）。服务端排序不可依赖，这里现算一次升序，
+// 使各端输出逐字可比。名字不是秘密（服务端在写入时就见过明文），值一律不在面上。
+func (s *Session) List() ([]string, error) {
+	if err := s.locked(); err != nil {
+		return nil, err
+	}
+	resp, err := s.do("GET", "/v2/secrets", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errorFromResp(resp)
+	}
+	var m struct {
+		Names []string `json:"names"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&m); err != nil {
+		return nil, errors.New("client: 名册响应格式非法")
+	}
+	sort.Strings(m.Names)
+	return m.Names, nil
 }
 
 // actionRun 是客户端面独有的取用事件（服务端四路由不使用 run；属事件动作枚举）。

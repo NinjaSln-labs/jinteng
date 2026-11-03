@@ -191,11 +191,12 @@ sleep 1; jtmux capture-pane -p -J -S -300 -t jinteng | grep '配对码（一次�
 <h3>7.1 命令面</h3>
 <pre><code>jinteng put    &lt;NAME&gt; &lt;value&gt;                          # 写入／覆盖
 jinteng get    &lt;NAME&gt;                                   # 取用并输出明文
+jinteng list                                            # 列出本端可取用的凭据名（只列名，不列值；升序）
 jinteng delete &lt;NAME&gt;                                   # 硬删除（产品内不可恢复）
 jinteng run    -e &lt;环境变量名&gt;=&lt;凭据名&gt; [-e …] &lt;命令&gt; [参数…]   # 注入子进程 env 后执行
 jinteng devices revoke &lt;本端 id&gt;                         # 撤销自己那端
 jinteng usage  [-window-days 30] [-out &lt;路径&gt;]           # 窗口达标判定／4 读数（本机，不出网）</code></pre>
-<p>凭据名硬规则：<code>[A-Za-z0-9_]{1,64}</code>（<strong>不含</strong>连字符与点），服务端在写库前把关，违反一律 <code>bad-request</code>。同名 <code>put</code> 是覆盖语义。<code>run</code> 会把 <code>JINTENG_*</code> 控制面变量从子进程 env 里剔除后再注入（实测 <code>JINTENG_ENV_LEAK=0</code>）。</p>
+<p>凭据名硬规则：<code>[A-Za-z0-9_]{1,64}</code>（<strong>不含</strong>连字符与点），服务端在写库前把关，违反一律 <code>bad-request</code>。同名 <code>put</code> 是覆盖语义。<code>run</code> 会把 <code>JINTENG_*</code> 控制面变量从子进程 env 里剔除后再注入（实测 <code>JINTENG_ENV_LEAK=0</code>）。<code>list</code> 只回该端<strong>持有 DEK 副本</strong>、因而本来就取得动的名字（名册＝可取用集合，同一次点查判定）；它在 §13「晚登记端」那格讲的边界上同样缺席——登记之前写入的凭据既不出现也取不到。别与 <code>pair list</code> 混：那列的是服务端本机未消费的配对码索引前缀。</p>
 <h3>7.2 退出码</h3>
 <table>
 <tr><th>码</th><th>含义</th><th>典型动作</th></tr>
@@ -207,7 +208,7 @@ jinteng usage  [-window-days 30] [-out &lt;路径&gt;]           # 窗口达标�
 <tr><td>6</td><td>该端没有这条名的副本（<code>wrap-missing</code>）</td><td>§7.4：让写入端重写一次</td></tr>
 <tr><td>7</td><td>服务端不可达（<code>ErrUnreachable</code>）</td><td>检查监听／防火墙／DNS；<strong>本产品不提供缓存值</strong></td></tr>
 </table>
-<p class="sub">被 <code>run</code> 调用的命令若自己要用非零退出码，建议 ≥10，以免与上表歧义。</p>
+<p class="sub">被 <code>run</code> 调用的命令若自己要用非零退出码，建议 ≥10，以免与上表歧义。<code>list</code> 不引入任何新码：成功为 0（名册为空也是 0——「这台端还没有能取用的凭据」是事实不是错误），用法错误 2，解锁失败 1，本端已撤销 5，服务端不可达 7。</p>
 <h3>7.3 一次最小旅程</h3>
 <pre><code># 在已登记的端上
 jinteng put GIT_TOKEN ghp_xxx…            # 注意：值走 argv（见 §12 天花板）
@@ -220,8 +221,11 @@ jinteng usage -window-days 30 | head -20</code></pre>
   → rc=6，jinteng get: client: 该端无此名的 wrap 副本（服务端码 wrap-missing）
 在 dev-a 上把同一条重写一次：jinteng put SHARED 'V1'
 dev-b 上 jinteng get SHARED
-  → V1                                        # 实测结果</code></pre>
-<p>原因：DEK 的按端重包发生在 <strong>写入时</strong>（写入端从服务端名录取全部在册未撤销端）。新登记的端在此之前的任何写入都没带上它。所以每接入一台新端，把需要共享的凭据<strong>重写或轮换一次</strong>。</p>
+  → V1                                        # 实测结果
+dev-b 上 jinteng list
+  → （列出的就是它取得动的那些；SHARED 未重写前不在名册里）
+                                              # 断言见 client 单测：晚登记端名册里没有它取不到的名</code></pre>
+<p>原因：DEK 的按端重包发生在 <strong>写入时</strong>（写入端从服务端名录取全部在册未撤销端）。新登记的端在此之前的任何写入都没带上它。所以每接入一台新端，把需要共享的凭据<strong>重写或轮换一次</strong>。<code>list</code> 与这条同口径——它只回该端持有副本的名，因此<strong>不会</strong>给新端变出一份看得见却取不到的清单。</p>
 
 <h3>7.5 删除一条凭据</h3>
 <pre><code>jinteng delete GIT_TOKEN          # 期望「jinteng: 凭据已删除」，rc=0
@@ -337,6 +341,7 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 <h2 id="s13"><span class="n">12</span>已知天花板（如实标注）</h2>
 <ul>
 <li><strong>同机同权限</strong>能读 <code>/var/lib/jinteng</code> 整个目录的人，同时拿到 db 与 <code>library.key</code>，因此能还原凭据名；TLS 私钥也在同一目录。异机取证这条 只主张<strong>材料离开本机即失效</strong>，不主张同机不可读。</li>
+<li><strong>名册读取是在线鉴权动作，不是一次新的解密</strong>：<code>list</code>（<code>GET /v2/secrets</code>）由服务端用 <code>library.key</code> 解出名字，只回调用端持有 DEK 副本的那些——它列出的每个名，这台端本来就 <code>get</code> 得动，因此本面不扩「取得到」，只把「看得见」从猜测变成读数。库文件单独外流（没有 <code>library.key</code>）仍然列不出任何名；一台端<strong>登记之前</strong>写入的凭据对它既不可见也不可取（见 §13「晚登记端」），要补得由持有该凭据的端重写一次。</li>
 <li><strong>值与配对码走 argv</strong>：<code>jinteng put &lt;NAME&gt; &lt;value&gt;</code> 与 <code>init -pair &lt;码&gt;</code> 的进程参数对本机同权限可见（<code>ps</code>／审计日志）。这是既有形态，不是本次部署能改的口径。</li>
 <li><strong>没有恢复</strong>：忘记口令＝丢该端；<code>device.key</code> 丢了只能作为<strong>新 id</strong> 重新登记，并且重写需要共享的凭据。</li>
 <li><strong>不做端侧缓存</strong>：服务端不可达即退出码 7。离线可用属未来新 change（与异机取证这条／3 直接冲突）。</li>
@@ -347,7 +352,7 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 </ul>
 
 <h2 id="s14"><span class="n">13</span>本机实测记录与验证跑法</h2>
-<p>本手册的技术内容在 2026-10-16 于本机（Linux／WSL2，systemd 255，tmux 可用）以<strong>临时材料目录</strong>实跑验证，未触碰任何真实材料；<code>systemd-analyze verify</code> 对 §4 单元返回 rc=0。2026-10-26 在同一口径下增补 delete／同名重写实测（见下表）。</p>
+<p>本手册的技术内容在 2026-10-16 于本机（Linux／WSL2，systemd 255，tmux 可用）以<strong>临时材料目录</strong>实跑验证，未触碰任何真实材料；<code>systemd-analyze verify</code> 对 §4 单元返回 rc=0。2026-10-26 在同一口径下增补 delete／同名重写实测（见下表）。2026-11-03 在同一口径下增补 <code>list</code> 名册实测（<code>make e2e</code> 与 <code>make multidev</code> 全绿，含新步的退出码与事件账读数）。</p>
 <table>
 <tr><th>验证项</th><th>真实结果</th></tr>
 <tr><td>通配监听</td><td><code>-listen 0.0.0.0:18787</code> 被拒：原文见 §1 警示框</td></tr>
@@ -356,6 +361,8 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 <tr><td>配对码单次使用</td><td>同码第二次 ⇒ 服务端码 <code>invalid-pair-code</code></td></tr>
 <tr><td>晚登记端</td><td>直接取 ⇒ <code>rc=6 wrap-missing</code>；写入端重写一次 ⇒ 取到值</td></tr>
 <tr><td>删除与同名重写</td><td><code>delete <span class="ph">&lt;NAME&gt;</span></code> rc=0；随后 <code>get</code> rc=3；同名重写后取回新值；事件账出现 <code>action=delete outcome=ok</code>，<code>usage</code> 成功取用计数不变</td></tr>
+<tr><td>名册＝可取用集合</td><td><code>list</code> rc=0：硬删除后该名不再出现、同名重写后重新出现（两次读数逐字相符）；未签名读 ⇒ 401；撤销端读 ⇒ rc=5（拒绝早于任何名字解密）；单测内晚登记端只列到它登记之后写入的名，对它列不出的那个名 <code>get</code> 同样 403 <code>wrap-missing</code>；事件 <code>action=list</code> 的 ok／denied 计数与脚本逐条核实的次数相等，且 <code>name_blind_index</code> 为空</td></tr>
+<tr><td>多端名册一致</td><td>三端各跑 <code>list</code>，输出逐字相等（实测 <code>MD_SHARED</code>），名册文本内不含任何合成凭据值；名册只在 shell 变量内比对，零明文扫描面未新增任何文件</td></tr>
 <tr><td>自撤与撤后取用</td><td><code>devices revoke <span class="ph">&lt;本端 id&gt;</span></code> rc=0；该端取用 rc=5</td></tr>
 <tr><td>usage 未达成态</td><td>只有一台端有成功取用时 <code>devices_with_success=1</code>、<code>criterion1_met=false</code>，并打印 产品前提 的降级文案（不粉饰）</td></tr>
 </table>
@@ -378,6 +385,7 @@ jinteng get X 2>&1 | tail -2                    # rc=7 就是不可达；本产�
 <tr><td>材料目录覆盖</td><td><code>JINTENG_DIR</code>（缺省 <code>~/.jinteng</code>），目录 0700、文件 0600</td><td><code>internal/material</code></td></tr>
 <tr><td>窗口达标判定 窗口</td><td>30 天，≥2 台端各自成功取用 ≥1 次</td><td><code>docs/product/产品基线-direction.md</code> ＋ 使用统计流水</td></tr>
 <tr><td>删除语义</td><td>单事务硬删除密文／名字密文／全部按端 wrap；产品内不可恢复，不承诺物理擦除</td><td><code>internal/store</code> <code>DeleteSecret</code></td></tr>
+<tr><td>名册读取</td><td>只列调用端持有 DEK 副本因而取得动的名（升序；空名册为 <code>[]</code>）；事件 <code>action=list</code> 不带盲索引，不进 <code>usage</code> 的取用分子</td><td><code>internal/server</code> <code>handleListSecrets</code> ＋ <code>internal/store</code> <code>ListNameCiphersForDevice</code></td></tr>
 </table>
 
 <hr>

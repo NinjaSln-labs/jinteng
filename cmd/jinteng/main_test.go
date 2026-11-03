@@ -123,6 +123,36 @@ func TestDeleteUsageErrors(t *testing.T) {
 	}
 }
 
+// TestListUsageErrors：list 不收参数，且拒绝必须早于任何解锁与联网——空 JINTENG_DIR
+// 下若真去解锁只会拿到退出码 1，退出码 2 本身就证明没出门。
+func TestListUsageErrors(t *testing.T) {
+	t.Setenv("JINTENG_DIR", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	if code := cli([]string{"list", "extra"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("多余参数应得退出码 2，得 %d（stderr=%q）", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "用法: jinteng list") {
+		t.Errorf("list usage 错误文本 = %q", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := cli([]string{"list", "-nope"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("未知参数应得退出码 2，得 %d（stderr=%q）", code, stderr.String())
+	}
+}
+
+// TestUsageTextMentionsList：顶层 usage 必须列出 list 并与 pair list 区分开。
+func TestUsageTextMentionsList(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := cli([]string{"nosuch"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("未知命令应得退出码 2，得 %d", code)
+	}
+	got := stderr.String()
+	if !strings.Contains(got, "列出本端可取用的凭据名") {
+		t.Errorf("顶层 usage 未列出 list 面：%q", got)
+	}
+}
+
 // TestUsageTextMentionsDelete：顶层 usage 必须列出 delete 命令。
 func TestUsageTextMentionsDelete(t *testing.T) {
 	var stdout, stderr bytes.Buffer

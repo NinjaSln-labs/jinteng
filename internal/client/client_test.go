@@ -298,6 +298,94 @@ func TestUnlockSucceedsAndSessionRoundTrips(t *testing.T) {
 	}
 }
 
+// TestSessionListReturnsItsOwnNames 名册面：List 只回本端可取用的名，升序，不含值；
+// 删除即从名册消失；另一台晚登记的端看不到它登记之前写入的名（与 Take 的
+// ErrWrapMissing 同因）；会话关闭后拒绝出网。
+func TestSessionListReturnsItsOwnNames(t *testing.T) {
+	e := newEnv(t)
+	pubA, privA := makeDevice(t)
+	e.register(t, "dev-a", pubA)
+	e.writeConfig(t, "dev-a")
+	e.sealSelf(t, "dev-a", privA)
+	forceEnvPass(t)
+
+	sessA, err := Unlock()
+	if err != nil {
+		t.Fatalf("Unlock(dev-a): %v", err)
+	}
+	defer sessA.Close()
+
+	if got, err := sessA.List(); err != nil {
+		t.Fatalf("空库 List: %v", err)
+	} else if got == nil || len(got) != 0 {
+		t.Errorf("空库名册应为非 nil 空切片，得 %#v", got)
+	}
+	for _, nm := range []string{"DB_DSN", "GH_TOKEN"} {
+		if err := sessA.Put(nm, "SYNTH-VALUE-never-in-list"); err != nil {
+			t.Fatalf("Put(%s): %v", nm, err)
+		}
+	}
+	got, err := sessA.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if strings.Join(got, ",") != "DB_DSN,GH_TOKEN" {
+		t.Errorf("名册 = %v，期望 [DB_DSN GH_TOKEN]（升序）", got)
+	}
+	for _, n := range got {
+		if strings.Contains(n, "SYNTH-VALUE") {
+			t.Errorf("名册里混进凭据值: %q", n)
+		}
+	}
+
+	// dev-b 在两条凭据之后才登记 ⇒ 它只看得见自己登记之后写入的那条。
+	pubB, privB := makeDevice(t)
+	e.register(t, "dev-b", pubB)
+	e.writeConfig(t, "dev-b")
+	e.sealSelf(t, "dev-b", privB)
+	sessB, err := Unlock()
+	if err != nil {
+		t.Fatalf("Unlock(dev-b): %v", err)
+	}
+	defer sessB.Close()
+	if got, err := sessB.List(); err != nil {
+		t.Fatalf("dev-b List: %v", err)
+	} else if len(got) != 0 {
+		t.Errorf("晚登记端的名册应为空（它对这些名同样取不到），得 %v", got)
+	}
+	if _, err := sessB.Take("DB_DSN"); !errors.Is(err, ErrWrapMissing) {
+		t.Errorf("dev-b 取 DB_DSN 应 ErrWrapMissing，得 %v", err)
+	}
+	if err := sessB.Put("API_KEY", "SYNTH-VALUE-never-in-list"); err != nil {
+		t.Fatalf("Put(dev-b): %v", err)
+	}
+	if got, err := sessB.List(); err != nil {
+		t.Fatalf("dev-b List: %v", err)
+	} else if strings.Join(got, ",") != "API_KEY" {
+		t.Errorf("dev-b 名册 = %v，期望 [API_KEY]", got)
+	}
+	if got, err := sessA.List(); err != nil {
+		t.Fatalf("dev-a List: %v", err)
+	} else if strings.Join(got, ",") != "API_KEY,DB_DSN,GH_TOKEN" {
+		t.Errorf("dev-a 名册 = %v，期望含他端写入的 API_KEY（它同样有副本）", got)
+	}
+
+	// 硬删除即从名册消失（名册反映服务端现态，不是本端历史）。
+	if err := sessA.Delete("GH_TOKEN"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if got, err := sessA.List(); err != nil {
+		t.Fatalf("List after delete: %v", err)
+	} else if strings.Join(got, ",") != "API_KEY,DB_DSN" {
+		t.Errorf("删除后名册 = %v，期望 [API_KEY DB_DSN]", got)
+	}
+
+	sessA.Close()
+	if _, err := sessA.List(); err == nil {
+		t.Error("会话已关闭，List 必须拒绝（不得出网）")
+	}
+}
+
 // TestPutRejectsInvalidName 2.3 非法输入拒绝：空串、含 '-'、超 64 字符各自报错，
 // 且拒绝发生在任何写入之前（库内不出现该名）。
 func TestPutRejectsInvalidName(t *testing.T) {

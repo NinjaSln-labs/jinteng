@@ -1,4 +1,5 @@
-// jinteng 是本端 CLI：init / serve / put / get / run / devices revoke。
+// jinteng 是本端 CLI：init / serve / put / get / list / delete / run /
+// devices revoke / pair / usage。
 //
 // 退出码约定（e2e 演练脚本直接引用）：
 //
@@ -47,6 +48,7 @@ const usageText = `用法: jinteng <命令> [参数]
   serve  [-listen 127.0.0.1:8787]                                  启动 TLS 服务（首次生成证书并打印指纹）
   put    <name> <value>                                            写入／覆盖一条凭据
   get    <name>                                                    取用并输出明文
+  list                                                             列出本端可取用的凭据名（只列名，不列值；服务端面另有 pair list）
   delete <name>                                                    删除一条凭据（硬删除;不可恢复）
   run    -e <变量名>=<凭据名> [-e ...] <命令> [args...]              注入 env 后执行子进程
   devices revoke <本端 id>                                         撤销本端（取用面即时封锁;撤他端走 serve 终端）
@@ -71,6 +73,8 @@ func cli(args []string, stdout, stderr io.Writer) int {
 		return cmdPut(args[1:], stdout, stderr)
 	case "get":
 		return cmdGet(args[1:], stdout, stderr)
+	case "list":
+		return cmdList(args[1:], stdout, stderr)
 	case "delete":
 		return cmdDelete(args[1:], stdout, stderr)
 	case "run":
@@ -247,6 +251,34 @@ func cmdDelete(args []string, stdout, stderr io.Writer) int {
 		return exitOf(err)
 	}
 	fmt.Fprintln(stdout, "jinteng: 凭据已删除")
+	return 0
+}
+
+// cmdList 输出本端可取用的凭据名名册（一行一名，只有名、没有值）。名册为空就什么都不
+// 打印并退 0——「这台端还没有能取用的凭据」是事实而不是错误。不接受任何参数：用法错误
+// 必须发生在任何解锁与联网之前（与 cmdRun 同一条契约）。
+func cmdList(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("list", stderr)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "用法: jinteng list（无参数）")
+		return 2
+	}
+	sess, code := openSession(stderr)
+	if sess == nil {
+		return code
+	}
+	defer sess.Close()
+	names, err := sess.List()
+	if err != nil {
+		fmt.Fprintln(stderr, "jinteng list:", err)
+		return exitOf(err)
+	}
+	for _, n := range names {
+		fmt.Fprintln(stdout, n)
+	}
 	return 0
 }
 

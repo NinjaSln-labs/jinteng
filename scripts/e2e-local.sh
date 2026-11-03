@@ -7,8 +7,9 @@
 #   JINTENG_FP_OVERRIDE_DIR，由 fp.Get() 读本机 /etc/machine-id）→ put×2 →
 #   get（输出与合成值逐字节比对，比对在内存）→ run -e（子进程断言注入值
 #   正确、且继承 env 里没有任何 JINTENG_ 前缀控制面变量）→ delete →
-#   再 get（必须拿退出码 3）→ 同名重写 → 再 get 新值 → devices revoke →
-#   再 get（必须拿退出码 5）。
+#   再 get（必须拿退出码 3）→ list（名册必须与「本端取得动的集合」逐字相等，
+#   刚删掉的名字不再出现）→ 同名重写 → 再 get 新值 → 再 list → devices revoke →
+#   再 get（必须拿退出码 5）→ 再 list（撤销端读名册同样拿退出码 5）。
 # 收尾把「服务端全部可见面」（jinteng.db＋events.jsonl＋config.json＋
 # server.crt/server.key）用 strings＋grep -a 两路扫描，断言不含任何本次
 # 合成凭据值或口令；事件计数按 action+outcome 过滤，与脚本逐条核实的实际
@@ -113,6 +114,7 @@ export JINTENG_DIR="$MATS"
 export JINTENG_PASSENV="pw-$(rand_hex 16)"
 VAL_A="e2e-val-A-$(rand_hex 16)"
 VAL_B="e2e-val-B-$(rand_hex 16)"
+VAL_B2="" # 删除后同名重写的轮换值，稍后赋值；先声明以便 list 断言器在 set -u 下也能扫它
 DEVICE="dev-e2e-$(rand_hex 4)"
 [ -r /etc/machine-id ] || fail "环境不满足：/etc/machine-id 不可读，真指纹面无法演练"
 note "fp_source=real:/etc/machine-id（本机值不落输出；machine-id 前 8 位=$(head -c 8 /etc/machine-id)）"
@@ -177,6 +179,25 @@ ev_expect() { # $1=action $2=outcome $3=期望计数
 
 # 实际成功次数由脚本逐条核实的退出码累积，最后与事件账对照。
 succ_enroll=0; succ_put=0; succ_getsrv=0; succ_run=0; succ_delete=0; succ_revoke=0; succ_getdenied=0
+succ_list=0; succ_listdenied=0
+
+# list 断言器：$1=期望的换行分隔名册（字面量），$2=标签。名册只在 shell 变量里比对，
+# 绝不落任何文件——落盘就等于给零明文扫描面新增一个可见面（凭据值虽不在里面，
+# 但「扫描面清单」这条承诺会被悄悄改掉）。
+assert_list() { # $1=label $2=期望名册
+  local label="$1" want="$2" got
+  got="$(cli 0 "$label" list)"
+  succ_list=$((succ_list + 1))
+  [ "$got" = "$want" ] || fail "$label：名册不符，实际=$(printf '%s' "$got" | tr '\n' ',')，期望=$(printf '%s' "$want" | tr '\n' ',')"
+  # 名册里绝不能出现任何凭据值（这是 list 面唯一的值泄漏形状）。
+  for v in "$VAL_A" "$VAL_B" "$VAL_B2"; do
+    [ -n "${v:-}" ] || continue
+    case $'\n'"$got"$'\n' in
+      *$'\n'"$v"$'\n'*) fail "$label：名册里出现凭据值（摘要=$(digest "$v")）" ;;
+    esac
+  done
+  note "$label 名册逐字相符且不含任何值：$(printf '%s' "$got" | tr '\n' ' ')"
+}
 
 # ---- 旅程 ----
 cli 0 "init" init -url "https://127.0.0.1:$PORT" -pin "$PIN" -device "$DEVICE" -pair "$PAIR_CODE" >/dev/null
@@ -220,6 +241,9 @@ cli 3 "get(删除后)" get E2E_CRED_B >/dev/null
 succ_getdenied=$((succ_getdenied + 1))
 note "delete 成功：删除后 get 如约定拿到退出码 3（ErrNotFound）"
 
+# 名册＝可取用集合：刚硬删除的那条已从名册消失（同 get 的 404），不是残影。
+assert_list "list(删除后)" "E2E_CRED_A"
+
 VAL_B2="$(printf 'E2E-ROTATED-%s' "$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')")"
 cli 0 "put E2E_CRED_B(删除后重写)" put E2E_CRED_B "$VAL_B2" >/dev/null
 succ_put=$((succ_put + 1))
@@ -227,6 +251,9 @@ got="$(cli 0 "get E2E_CRED_B(重写后)" get E2E_CRED_B)"
 succ_getsrv=$((succ_getsrv + 1))
 [ "$got" = "$VAL_B2" ] || fail "删除后重写的 get 输出不符（摘要=$(digest "$got")）"
 note "删除后同名重写与取回成功（摘要=$(digest "$got")）"
+
+# 重写回来的名字重新进入名册，升序逐字可比。
+assert_list "list(重写后)" $'E2E_CRED_A\nE2E_CRED_B'
 
 cli 0 "devices revoke" devices revoke "$DEVICE" >/dev/null
 succ_revoke=$((succ_revoke + 1))
@@ -236,6 +263,12 @@ cli 5 "get(撤销后)" get E2E_CRED_A >/dev/null
 succ_getdenied=$((succ_getdenied + 1))
 note "撤销后 get 如约定拿到退出码 5（ErrRevoked）"
 
+# 撤销端读名册同样被拒（auth 关口在任何名字解密之前）：撤销封的是整个取用面，
+# 名册不是一条绕过去读元数据的侧门。
+cli 5 "list(撤销后)" list >/dev/null
+succ_listdenied=$((succ_listdenied + 1))
+note "撤销后 list 如约定拿到退出码 5（ErrRevoked，拒绝早于任何名字解密）"
+
 # ---- 事件账：按 action+outcome 过滤，与逐条核实的实际成功次数相等 ----
 ev_expect enroll ok "$succ_enroll"
 ev_expect put ok "$succ_put"
@@ -244,6 +277,10 @@ ev_expect run ok "$succ_run"
 ev_expect delete ok "$succ_delete"
 ev_expect revoke ok "$succ_revoke"
 ev_expect get denied "$succ_getdenied"
+# list 的成功读数不进 usage 的分子（那里只数 get／run），但它必须落事件——
+# 「谁读过名册」与「谁取过值」同样可查，blind index 一律为空。
+ev_expect list ok "$succ_list"
+ev_expect list denied "$succ_listdenied"
 
 # ---- 服务端可见面零明文断言（只扫“值”，凭据名明文作 key 是既定事实） ----
 SURFACE=(jinteng.db events.jsonl config.json server.crt server.key library.key)

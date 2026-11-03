@@ -2,6 +2,8 @@
 // 撤销只置状态位，O(1)，绝不遍历重包其余密文——实质防线是
 // 「凭据轮换后旧 wrap 解不出新 DEK」，由 PutSecret 的按名整体替换语义提供地基。
 // replay 桶承载 v2 的 nonce 去重，pairing 桶承载一次性配对码记录。
+// 名册读取只交出现有真名密文（ListNameCiphersForDevice），解密属持 library.key
+// 的服务层——本包看不出也不猜某个名属于谁。
 // 错误文本只含 name/id 等定位信息，不含密文、DEK 或任何明文值。
 package store
 
@@ -276,6 +278,42 @@ func (s *Store) DeleteSecret(index string) error {
 		}
 		return nil
 	})
+}
+
+// NameEntry 是一条名册条目：盲索引＋真名密文。Index 只用于错误定位（错误文本
+// 只截前 8 位）；解密属服务层——store 不持 library.key，也不做命名策略。
+type NameEntry struct {
+	Index      string
+	NameCipher []byte
+}
+
+// ListNameCiphersForDevice 返回该端持有 wrap 副本的全部凭据条目。
+// 走 names 游标，逐名对 wraps 做一次点查（键＝index\x00deviceID）⇒「列得出」与
+// 「取得出」读的是同一个事实，不存在「列出来却拿不到」的名。O(#names) 次点查，
+// 不扫 wraps 前缀；设备 id 非法在任何读取之前拒绝；返回值均为拷贝，事务外有效。
+func (s *Store) ListNameCiphersForDevice(deviceID string) ([]NameEntry, error) {
+	if err := validDeviceID(deviceID); err != nil {
+		return nil, err
+	}
+	out := make([]NameEntry, 0)
+	err := s.db.View(func(tx *bolt.Tx) error {
+		nb, wb := tx.Bucket(bucketNames), tx.Bucket(bucketWraps)
+		c := nb.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			if wb.Get(wrapKey(string(k), deviceID)) == nil {
+				continue
+			}
+			out = append(out, NameEntry{
+				Index:      string(k),
+				NameCipher: append([]byte(nil), v...),
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // encodeDevice 序列化为 revoked(1B)|dh_pub(32B)|sig_pub(32B)＝65 B；

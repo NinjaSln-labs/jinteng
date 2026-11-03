@@ -1,6 +1,7 @@
 // Package server 是凭据服务的 HTTP 面 v2：登记（POST /v2/enroll）、名录
 // （GET /v2/devices）、写入（POST /v2/secret）、取用（GET /v2/secret/{name}）、
-// 删除（DELETE /v2/secret/{name}）、撤销（POST /v2/device/revoke）；每个到达 API 路由的请求写一条取用事件
+// 名册（GET /v2/secrets）、删除（DELETE /v2/secret/{name}）、撤销（POST /v2/device/revoke）；
+// 每个到达 API 路由的请求写一条取用事件
 // （成功与被拒都写，outcome 区分）。v1 路由整体废除，不做版本协商。
 // 除 enroll（由一次性配对码授权、新签名公钥自证）外，每个请求都必须携带
 // 由该端签名私钥产生的有效签名、时间戳与 nonce——「调用者是谁」从声称
@@ -17,7 +18,9 @@
 // 三类拒绝可区分：未注册设备 ⇒ 401 unauthorized-device；已撤销设备 ⇒
 // 403 revoked；凭据名不存在 ⇒ 404 not-found。被拒响应体只含 {"error": code}，
 // 不回显凭据值、密文片段或 wrap 字节；成功取用响应只回密文信封与该端 wrap
-// （均为已加密材料——明文由客户端封存，从不过服务端）。
+// （均为已加密材料——凭据值由客户端封存，从不过服务端）。GET /v2/secrets 是唯一
+// 回明文标识的路由：它回名字，且只回调用端自己有副本、因而本来就取得动的那些
+// ——名字是取用的前提而非秘密，服务端在写入时就已见过它们的全部明文。
 // 凭据值／口令／DEK／私钥不进 error 文本、不进事件、不进日志。
 package server
 
@@ -34,6 +37,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
@@ -93,6 +97,9 @@ const (
 	actionDelete  = "delete"
 	actionRevoke  = "revoke"
 	actionDevices = "devices"
+	// actionList＝名册读取。它不指向某一条凭据，故事件的 name_blind_index 为空
+	// （与 actionDevices 同例）；usage 的窗口达标判定只数 get／run，本动作不入分子。
+	actionList = "list"
 
 	outcomeOK     = "ok"
 	outcomeDenied = "denied"
@@ -133,7 +140,9 @@ func DBPath() (string, error) {
 // BlindIndex 由服务端库密钥对凭据名派生 HMAC-SHA256 索引（密钥化盲索引）：
 // 它既是库内查找键，也是事件里的 name_blind_index。
 // 客户端写 run 事件必须用同一把 library.key 调本函数，两侧才构造一致。
-// 明文名绝不进事件；无库密钥者列不出名。
+// 明文名绝不进事件。无 library.key 者**离线拿着库文件**仍列不出名；在册端可以经
+// 鉴权在线读到它自己有副本的那部分（handleListSecrets）——那是取用面本已给它的
+// 能力，不是一次新的解密。
 func BlindIndex(libKey []byte, name string) (string, error) {
 	if name == "" {
 		return "", errors.New("server: 凭据名不能为空")
@@ -174,6 +183,7 @@ func New(st *store.Store, libKey []byte, opts Options) *Server {
 	mux.HandleFunc("GET /v2/devices", s.auth(actionDevices, s.handleDevices))
 	mux.HandleFunc("POST /v2/secret", s.auth(actionPut, s.handlePut))
 	mux.HandleFunc("GET /v2/secret/{name}", s.auth(actionGet, s.handleTake))
+	mux.HandleFunc("GET /v2/secrets", s.auth(actionList, s.handleListSecrets))
 	mux.HandleFunc("DELETE /v2/secret/{name}", s.auth(actionDelete, s.handleDelete))
 	mux.HandleFunc("POST /v2/device/revoke", s.auth(actionRevoke, s.handleRevoke))
 	s.mux = mux
@@ -273,6 +283,7 @@ func (s *Server) Listen() error {
 // GET  /v2/devices （签名）                                                    → 200 {"devices":[{id,revoked,dh_pub,sig_pub}]}
 // POST /v2/secret  {"name":s,"ciphertext":b64,"wraps":{deviceID:b64,…}}        → 200 {"status":"stored"}
 // GET  /v2/secret/{name} （签名）                                              → 200 {"ciphertext":b64,"wrap":b64}
+// GET  /v2/secrets      （签名）                                              → 200 {"names":[s,…]}（升序；只含该端有 wrap 副本的名，空集为 []）
 // DELETE /v2/secret/{name} （签名）                                            → 200 {"status":"deleted"}
 // POST /v2/device/revoke {"device_id":s}（签名；body 是被撤销的目标端）        → 200 {"status":"revoked"}
 // 所有非 2xx：{"error": <code>}。请求体里不再有自声明的调用方身份。
@@ -465,6 +476,34 @@ func (s *Server) handleTake(w http.ResponseWriter, r *http.Request) {
 		"ciphertext": base64.StdEncoding.EncodeToString(ct),
 		"wrap":       base64.StdEncoding.EncodeToString(devWrap),
 	})
+}
+
+// handleListSecrets 回调用端可取用的凭据名名册：服务层用自己手里的 library.key
+// 解密名字密文，但只交出现该端持有 wrap 副本的那些——「列得出」与「取得出」读
+// 同一条事实（store 的点查），所以本路由不扩任何可见面：调用端列到的每个名，它
+// 本来就 get 得动。一台端登记之前写入的凭据没有它的副本，因而不出现（同
+// wrap-missing／退出码 6）。名册不指向单条凭据，故事件不带盲索引（actionDevices
+// 同例）；响应只含名字，不含密文、wrap 或任何值。
+func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
+	caller := identityOf(r)
+	entries, err := s.st.ListNameCiphersForDevice(caller)
+	if err != nil {
+		s.reply(w, actionList, caller, "", http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		// 解不开＝这条名字密文坏了：整体拒绝而非静默跳过——跳过的名册会悄悄少一截，
+		// 与 handleDevices 对畸形设备记录不兼容读、不跳过的口径一致。
+		plain, err := crypto.OpenName(s.libKey, e.NameCipher)
+		if err != nil {
+			s.reply(w, actionList, caller, "", http.StatusBadRequest, codeBadRequest)
+			return
+		}
+		out = append(out, string(plain))
+	}
+	sort.Strings(out)
+	s.replyOK(w, actionList, caller, "", map[string]any{"names": out})
 }
 
 // handleDelete 删除一条凭据：名字校验与盲索引计算后交给 store 的单事务硬删除。

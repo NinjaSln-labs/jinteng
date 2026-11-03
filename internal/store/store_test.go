@@ -841,3 +841,75 @@ func TestDeleteThenRePutLeavesNoOldWraps(t *testing.T) {
 		t.Error("重写后仍残留 dev-a 的旧 wrap")
 	}
 }
+
+// TestListNameCiphersForDeviceMembershipOnly 名册读取与取用面读同一个事实：某端
+// 只出现它当前持有 wrap 副本的名。从未发过副本的名不出现；副本被同名重写整体
+// 挤掉之后也不出现（PutSecret 覆盖语义的直接后果，见上一个测试）。撤销只置状态位
+// 且不删 wrap（store 中立），所以撤销端的名册形状不变——拒绝它属服务层判定。
+func TestListNameCiphersForDeviceMembershipOnly(t *testing.T) {
+	st, _ := openTestStore(t)
+	pubA, _ := mustNewDevice(t)
+	pubB, _ := mustNewDevice(t)
+	for id, pub := range map[string][]byte{"dev-a": pubA, "dev-b": pubB} {
+		if err := st.AddDevice(id, pub, sigPubOf(t)); err != nil {
+			t.Fatalf("AddDevice(%s): %v", id, err)
+		}
+	}
+	dek, err := crypto.NewDEK()
+	if err != nil {
+		t.Fatalf("NewDEK: %v", err)
+	}
+	ct, err := crypto.SealValue(dek, []byte("合成值"))
+	if err != nil {
+		t.Fatalf("SealValue: %v", err)
+	}
+	// BOTH：两端都有副本；ONLY-B：只给 dev-b 发（模拟 dev-a 登记之后才写入的名）。
+	put := func(name string, wraps map[string][]byte) {
+		t.Helper()
+		if err := st.PutSecret(idxOf(t, name), nameCipherOf(t, name), ct, wraps); err != nil {
+			t.Fatalf("PutSecret(%s): %v", name, err)
+		}
+	}
+	put("BOTH", map[string][]byte{"dev-a": mustWrap(t, dek, pubA), "dev-b": mustWrap(t, dek, pubB)})
+	put("ONLY_B", map[string][]byte{"dev-b": mustWrap(t, dek, pubB)})
+
+	names := func(deviceID string) []string {
+		t.Helper()
+		es, err := st.ListNameCiphersForDevice(deviceID)
+		if err != nil {
+			t.Fatalf("ListNameCiphersForDevice(%s): %v", deviceID, err)
+		}
+		out := make([]string, 0, len(es))
+		for _, e := range es {
+			plain, err := crypto.OpenName(testLibKey, e.NameCipher)
+			if err != nil {
+				t.Fatalf("OpenName(%.8s…): %v", e.Index, err)
+			}
+			out = append(out, string(plain))
+		}
+		return out
+	}
+	if got := names("dev-a"); len(got) != 1 || got[0] != "BOTH" {
+		t.Errorf("dev-a 名册应只有 BOTH，得 %v", got)
+	}
+	if got := names("dev-b"); len(got) != 2 {
+		t.Errorf("dev-b 名册应有两条，得 %v", got)
+	}
+	if got, err := st.ListNameCiphersForDevice("dev-never"); err != nil {
+		t.Errorf("未登记端应得空名册而非 error: %v", err)
+	} else if got == nil || len(got) != 0 {
+		t.Errorf("空名册应是非 nil 空切片（序列化要为 []），得 %#v", got)
+	}
+	for _, bad := range []string{"", "dev\x00a"} {
+		if _, err := st.ListNameCiphersForDevice(bad); err == nil {
+			t.Errorf("非法设备 id %q 应在任何读取之前被拒", bad)
+		}
+	}
+
+	if err := st.RevokeDevice("dev-a"); err != nil {
+		t.Fatalf("RevokeDevice(dev-a): %v", err)
+	}
+	if got := names("dev-a"); len(got) != 1 || got[0] != "BOTH" {
+		t.Errorf("撤销不应改变名册形状（不删 wrap），得 %v", got)
+	}
+}

@@ -2,3 +2,8 @@
 *.exe
 *.test
 /dev/
+
+# 本端工作件，不随版本走：交接存储／agent 约定与技能副本／本机 AGENTS.md
+/.handoff/
+/.agents/
+/AGENTS.md

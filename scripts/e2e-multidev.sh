@@ -5,8 +5,9 @@
 #   serve 绑**非回环**地址（v2 放开后的形态）→ serve 终端管理通道签发配对码（v2
 #   的运行形态：bbolt 单写者，服务在跑时配对码只能由 serve 进程自己签发）→
 #   三端各自 init（各持自己的材料目录与机器指纹）→ A 写 → B/C 取回同一值 →
+#   三端各读名册必须逐字相等（名册＝可取用集合，不含值）→
 #   停服务后取用必须拿退出码 7 且不回吐旧值→ 重启后取最新值 →
-#   撤销一端 → 该端取用被拒 → 轮换写入 → 存活端拿到新值。
+#   撤销一端 → 该端取用被拒且读名册同样被拒 → 轮换写入 → 存活端拿到新值。
 # 收尾扫描服务端全部可见面，断言不含任何本次合成值。
 #
 # 口径钉死（否则读数会被读大）：本演练的三端是**同一台物理机上的三种端形态**，
@@ -196,6 +197,21 @@ done
 [ "$GOT_A" = "$VAL_V1" ] || fail "A 取回的不是刚写入的值"
 note "三端取回同一值 ✓（值摘要 $(digest "$VAL_V1")，比对在内存）"
 
+# ---- 名册面：三端都在写入之前登记 ⇒ 各自读到的可取用集合必须逐字相等 ----
+# 名册只在 shell 变量里比对，不落任何文件（不给零明文扫描面新增可见面）。
+LIST_A="$(cli_for a "$PASS_A" list)" || fail "A list 失败：$(printf %s "$LIST_A" | tail -c 120)"
+LIST_B="$(cli_for b "$PASS_B" list)" || fail "B list 失败：$(printf %s "$LIST_B" | tail -c 120)"
+LIST_C="$(cli_for c "$PASS_C" list)" || fail "C list 失败：$(printf %s "$LIST_C" | tail -c 120)"
+[ "$LIST_A" = "$LIST_B" ] && [ "$LIST_B" = "$LIST_C" ] || \
+  fail "三端名册不一致：A=$(printf %s "$LIST_A" | tr '\n' ',') B=$(printf %s "$LIST_B" | tr '\n' ',') C=$(printf %s "$LIST_C" | tr '\n' ',')"
+[ "$LIST_A" = "$CRED" ] || fail "名册应只含 $CRED，实得 $(printf %s "$LIST_A" | tr '\n' ',')"
+for v in "$VAL_V1" "$VAL_V2"; do
+  case $'\n'"$LIST_A"$'\n' in
+    *$'\n'"$v"$'\n'*) fail "名册里出现凭据值（摘要 $(digest "$v")）" ;;
+  esac
+done
+note "三端名册逐字相等且不含值 ✓（$(printf %s "$LIST_A" | tr '\n' ' ')）"
+
 # ---- 停服务后取用：必须退出码 7，且不给旧值 ----
 reap "$SERVE_PID"
 SERVE_PID=""
@@ -225,6 +241,9 @@ note "客户端撤他端被拒 ✓（退出码 $rc,未出网即拒）"
 revoke_via_channel dev-md-c || fail "管理通道撤销 C 未生效"
 rc=0; out="$(cli_for c "$PASS_C" get "$CRED")" || rc=$?
 [ "$rc" -eq 5 ] || fail "被撤销端取用应拿退出码 5，实得 $rc（摘要 $(printf %s "$out" | tail -c 120)）"
+rc=0; out="$(cli_for c "$PASS_C" list)" || rc=$?
+[ "$rc" -eq 5 ] || fail "被撤销端读名册应拿退出码 5，实得 $rc（摘要 $(printf %s "$out" | tail -c 120)）"
+note "撤销端读名册同样被拒 ✓（退出码 5，拒绝早于任何名字解密——名册不是绕开取用面的侧门）"
 out="$(cli_for b "$PASS_B" put "$CRED" "$VAL_V1")" || fail "撤销后 B 仍能写入：$out"
 GOT_A3="$(cli_for a "$PASS_A" get "$CRED")" || fail "撤销后 A get 失败：$GOT_A3"
 [ "$GOT_A3" = "$VAL_V1" ] || fail "撤销一端后存活端取到的值不符"

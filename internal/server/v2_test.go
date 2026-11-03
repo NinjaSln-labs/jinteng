@@ -336,6 +336,96 @@ func TestV2DevicesDirectoryRequiresSignatureAndHoldsNoSecrets(t *testing.T) {
 	}
 }
 
+// TestV2ListRequiresSignatureAndHoldsNoValues 名册面（GET /v2/secrets）：未签名读不到；
+// 已签名只拿到**本端持有 wrap 副本因而取得动**的名字——它登记之前写入的名不出现，
+// 而同一名在取用面同样被拒（403 wrap-missing）：两条判定同源，故本路由不扩可见面。
+// 响应里没有任何凭据材料；事件不带盲索引（名册不指向单条凭据，与 devices 同例）。
+func TestV2ListRequiresSignatureAndHoldsNoValues(t *testing.T) {
+	e := newEnv(t)
+	devA := e.newV2Device(t, "dev-a")
+
+	// 空库：名册是 []（不是 null）——客户端要能按空集合解析。
+	if status, body := e.v2Req(t, "dev-a", devA.seed, 0, "", "GET", "/v2/secrets", nil); status != http.StatusOK ||
+		!bytes.Contains(body, []byte(`"names":[]`)) {
+		t.Fatalf("空库名册 = %d %q，期望 200 且 names 为 []", status, body)
+	}
+	if status, _ := e.v2Req(t, "dev-a", nil, 0, "", "GET", "/v2/secrets", nil); status != http.StatusUnauthorized {
+		t.Errorf("未签名读名册 = %d，期望 401", status)
+	}
+
+	e.putSynthSecret(t, "dev-a", "EARLY") // dev-b 尚未登记 ⇒ 库里没有它的副本
+	devB := e.newV2Device(t, "dev-b")
+	e.putSynthSecret(t, "dev-b", "LATER") // 名录里两端都在 ⇒ 两端都有副本
+
+	names := func(id string, d v2Dev) []string {
+		t.Helper()
+		status, body := e.v2Req(t, id, d.seed, 0, "", "GET", "/v2/secrets", nil)
+		if status != http.StatusOK {
+			t.Fatalf("%s 名册应 200，得 %d %q", id, status, body)
+		}
+		var resp struct {
+			Names []string `json:"names"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			t.Fatalf("名册响应格式: %v（%q）", err, body)
+		}
+		for _, leak := range []string{"ciphertext", "wrap", "name_blind_index", "SYNTH-VALUE"} {
+			if bytes.Contains(body, []byte(leak)) {
+				t.Errorf("名册响应里出现凭据材料 %q", leak)
+			}
+		}
+		return resp.Names
+	}
+	if got := names("dev-a", devA); len(got) != 2 || got[0] != "EARLY" || got[1] != "LATER" {
+		t.Errorf("dev-a 名册 = %v，期望 [EARLY LATER]（含另一端在它登记之后写入的那条）", got)
+	}
+	if got := names("dev-b", devB); len(got) != 1 || got[0] != "LATER" {
+		t.Errorf("dev-b 名册 = %v，期望 [LATER]（它登记之前写入的 EARLY 不出现）", got)
+	}
+	if status, _ := e.takeAs(t, "dev-b", devB.seed, "EARLY"); status != http.StatusForbidden {
+		t.Errorf("dev-b 取 EARLY = %d，期望 403 wrap-missing（与名册缺席同因）", status)
+	}
+
+	// 撤销端：auth 关口在任何解密之前拒（不重包语义下它的 wrap 仍在库里，取用面已封）。
+	rvBody, _ := json.Marshal(map[string]string{"device_id": "dev-b"})
+	if status, body := e.v2Req(t, "dev-b", devB.seed, 0, "", "POST", "/v2/device/revoke", rvBody); status != http.StatusOK {
+		t.Fatalf("撤销 dev-b 应 200，得 %d %q", status, body)
+	}
+	if status, body := e.v2Req(t, "dev-b", devB.seed, 0, "", "GET", "/v2/secrets", nil); status != http.StatusForbidden ||
+		!bytes.Contains(body, []byte("device-revoked")) {
+		t.Errorf("撤销后读名册 = %d %q，期望 403 device-revoked", status, body)
+	}
+
+	// 事件账：三次成功名册读取（空库＋dev-a＋dev-b）各一条，字段恰为白名单五件，
+	// 且盲索引一律为空——名册不指向单条凭据，不能假装它指向。
+	raw, err := os.ReadFile(filepath.Join(e.dir, material.EventsFile))
+	if err != nil {
+		t.Fatalf("读事件文件: %v", err)
+	}
+	var okEvents []map[string]any
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		var m map[string]any
+		if len(line) == 0 || json.Unmarshal(line, &m) != nil || m["action"] != actionList {
+			continue
+		}
+		if len(m) != len(audit.AllowedFields()) {
+			t.Errorf("list 事件字段数 = %d，期望 %d", len(m), len(audit.AllowedFields()))
+		}
+		if m["outcome"] == outcomeOK {
+			okEvents = append(okEvents, m)
+		}
+	}
+	if len(okEvents) != 3 {
+		t.Fatalf("list 成功事件数 = %d，期望 3", len(okEvents))
+	}
+	for _, ev := range okEvents {
+		if ev["name_blind_index"] != "" {
+			t.Errorf("list 事件不该带盲索引，得 %v", ev["name_blind_index"])
+		}
+	}
+}
+
 // TestV2PairCodeLifecycle 配对码防线：无码被拒、用过一次即失效、库里读不到码明文。
 func TestV2PairCodeLifecycle(t *testing.T) {
 	e := newEnv(t)
